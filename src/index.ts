@@ -2,7 +2,11 @@
 import { Command } from 'commander';
 import { intro, outro } from '@clack/prompts';
 import pc from 'picocolors';
+import { env } from './env.ts';
+import { createDatabase } from './db/index.ts';
+import { syncCommand } from './commands/sync.ts';
 
+const db = createDatabase();
 const program = new Command();
 
 program
@@ -12,10 +16,10 @@ program
 
 program
   .command('sync')
-  .description('Sync latest stock prices')
+  .description('Sync latest stock prices from Finnhub')
   .action(async () => {
     intro(pc.bgCyan(pc.black(' firma sync ')));
-    // TODO
+    await syncCommand(db, env.FINNHUB_API_KEY);
     outro('Done');
   });
 
