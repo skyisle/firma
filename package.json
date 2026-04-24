@@ -1,0 +1,28 @@
+{
+  "name": "firma-app",
+  "version": "0.1.0",
+  "description": "Personal asset tracker for overseas investors",
+  "type": "module",
+  "bin": {
+    "firma": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsup src/index.ts --format esm --minify",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.9.1",
+    "better-sqlite3": "^11.9.1",
+    "commander": "^13.1.0",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.15.3",
+    "tsup": "^8.4.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3"
+  },
+  "packageManager": "yarn@4.14.1"
+}
