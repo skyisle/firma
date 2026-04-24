@@ -869,6 +869,7 @@ __metadata:
     "@clack/prompts": "npm:^0.9.1"
     "@firma/finnhub": "workspace:*"
     "@firma/utils": "workspace:*"
+    "@supabase/supabase-js": "npm:^2.104.1"
     "@types/better-sqlite3": "npm:^7.6.12"
     "@types/node": "npm:^22.15.3"
     better-sqlite3: "npm:^11.9.1"
