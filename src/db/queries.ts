@@ -13,12 +13,12 @@ export const getPortfolio = (db: Db): PortfolioRow[] =>
   db.all(sql`
     SELECT
       ticker,
-      SUM(CASE WHEN type = 'buy' THEN shares ELSE -shares END) AS net_shares,
+      SUM(CASE WHEN type = 'buy' THEN shares ELSE -shares END) AS netShares,
       SUM(CASE WHEN type = 'buy' THEN shares * price ELSE 0 END) /
-        NULLIF(SUM(CASE WHEN type = 'buy' THEN shares ELSE 0 END), 0) AS avg_price
+        NULLIF(SUM(CASE WHEN type = 'buy' THEN shares ELSE 0 END), 0) AS avgPrice
     FROM transactions
     GROUP BY ticker
-    HAVING net_shares > 0
+    HAVING netShares > 0
   `) as PortfolioRow[];
 
 export const getActiveTickers = (db: Db): string[] =>

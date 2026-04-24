@@ -6,6 +6,7 @@ import { env } from './env.ts';
 import { createDatabase } from './db/index.ts';
 import { syncCommand } from './commands/sync.ts';
 import { addCommand } from './commands/add.ts';
+import { portfolioCommand } from './commands/portfolio.ts';
 
 const db = createDatabase();
 const program = new Command();
@@ -28,9 +29,9 @@ program
   .command('portfolio')
   .alias('p')
   .description('Show portfolio overview')
-  .action(async () => {
+  .action(() => {
     intro(pc.bgCyan(pc.black(' firma portfolio ')));
-    // TODO
+    portfolioCommand(db);
     outro('Done');
   });
 
