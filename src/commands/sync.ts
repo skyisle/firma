@@ -1,14 +1,10 @@
 import { log, spinner } from '@clack/prompts';
 import pc from 'picocolors';
 import type { Db } from '../db/index.ts';
-import { holdings, prices } from '../db/schema.ts';
+import { prices } from '../db/schema.ts';
+import { getActiveTickers } from '../db/queries.ts';
 import { createFinnhubClient } from '../services/finnhub/index.ts';
 import type { StockData } from '../services/finnhub/types.ts';
-
-const getUniqueTickers = (db: Db): string[] => {
-  const rows = db.select({ ticker: holdings.ticker }).from(holdings).all();
-  return [...new Set(rows.map(r => r.ticker))];
-};
 
 const upsertPrice = (db: Db, data: StockData) =>
   db
@@ -42,7 +38,7 @@ const printStockRow = (data: StockData) => {
 };
 
 export const syncCommand = async (db: Db, apiKey: string) => {
-  const tickers = getUniqueTickers(db);
+  const tickers = getActiveTickers(db);
 
   if (tickers.length === 0) {
     log.warn('No holdings found. Run `firma add` to add stocks first.');

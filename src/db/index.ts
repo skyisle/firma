@@ -10,15 +10,6 @@ const DB_DIR = path.join(os.homedir(), '.firma');
 const DB_PATH = path.join(DB_DIR, 'firma.db');
 
 const initTables = (db: ReturnType<typeof drizzle>) => {
-  db.run(sql`CREATE TABLE IF NOT EXISTS holdings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ticker TEXT NOT NULL,
-    shares REAL NOT NULL,
-    avg_price REAL NOT NULL,
-    currency TEXT NOT NULL DEFAULT 'USD',
-    added_at TEXT NOT NULL
-  )`);
-
   db.run(sql`CREATE TABLE IF NOT EXISTS prices (
     ticker TEXT PRIMARY KEY,
     name TEXT NOT NULL,

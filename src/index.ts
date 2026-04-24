@@ -5,6 +5,7 @@ import pc from 'picocolors';
 import { env } from './env.ts';
 import { createDatabase } from './db/index.ts';
 import { syncCommand } from './commands/sync.ts';
+import { addCommand } from './commands/add.ts';
 
 const db = createDatabase();
 const program = new Command();
@@ -38,7 +39,7 @@ program
   .description('Add stock position or transaction')
   .action(async () => {
     intro(pc.bgCyan(pc.black(' firma add ')));
-    // TODO
+    await addCommand(db, env.FINNHUB_API_KEY);
     outro('Done');
   });
 

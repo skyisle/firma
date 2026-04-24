@@ -1,14 +1,5 @@
 import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
-export const holdings = sqliteTable('holdings', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  ticker: text('ticker').notNull(),
-  shares: real('shares').notNull(),
-  avgPrice: real('avg_price').notNull(),
-  currency: text('currency').notNull().default('USD'),
-  addedAt: text('added_at').notNull(),
-});
-
 export const prices = sqliteTable('prices', {
   ticker: text('ticker').primaryKey(),
   name: text('name').notNull(),
