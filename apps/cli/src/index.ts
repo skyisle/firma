@@ -9,6 +9,7 @@ import { addCommand } from './commands/add.ts';
 import { portfolioCommand } from './commands/portfolio.ts';
 import { signupCommand } from './commands/auth/signup.ts';
 import { loginCommand } from './commands/auth/login.ts';
+import { whoamiCommand } from './commands/auth/whoami.ts';
 
 const db = createDatabase();
 const program = new Command();
@@ -35,6 +36,15 @@ auth
   .action(async () => {
     intro(pc.bgCyan(pc.black(' firma auth login ')));
     await loginCommand();
+    outro('Done');
+  });
+
+auth
+  .command('whoami')
+  .description('Show currently logged-in account')
+  .action(() => {
+    intro(pc.bgCyan(pc.black(' firma auth whoami ')));
+    whoamiCommand();
     outro('Done');
   });
 
