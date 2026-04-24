@@ -2,15 +2,12 @@
 import { Command } from 'commander';
 import { intro, outro } from '@clack/prompts';
 import pc from 'picocolors';
-import { env } from './env.ts';
-import { createDatabase } from './db/index.ts';
 import { syncCommand } from './commands/sync.ts';
 import { addCommand } from './commands/add.ts';
 import { portfolioCommand } from './commands/portfolio.ts';
 import { loginCommand } from './commands/auth/login.ts';
 import { whoamiCommand } from './commands/auth/whoami.ts';
 
-const db = createDatabase();
 const program = new Command();
 
 program
@@ -40,10 +37,10 @@ auth
 
 program
   .command('sync')
-  .description('Sync latest stock prices from Finnhub')
+  .description('Sync latest stock prices')
   .action(async () => {
     intro(pc.bgCyan(pc.black(' firma sync ')));
-    await syncCommand(db, env.FINNHUB_API_KEY);
+    await syncCommand();
     outro('Done');
   });
 
@@ -51,18 +48,18 @@ program
   .command('portfolio')
   .alias('p')
   .description('Show portfolio overview')
-  .action(() => {
+  .action(async () => {
     intro(pc.bgCyan(pc.black(' firma portfolio ')));
-    portfolioCommand(db);
+    await portfolioCommand();
     outro('Done');
   });
 
 program
   .command('add')
-  .description('Add stock position or transaction')
+  .description('Add a transaction')
   .action(async () => {
     intro(pc.bgCyan(pc.black(' firma add ')));
-    await addCommand(db, env.FINNHUB_API_KEY);
+    await addCommand();
     outro('Done');
   });
 

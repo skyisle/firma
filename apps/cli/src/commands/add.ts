@@ -1,12 +1,7 @@
 import { cancel, isCancel, log, select, spinner, text } from '@clack/prompts';
 import pc from 'picocolors';
-import { eq } from 'drizzle-orm';
-import type { Db } from '../db/index.ts';
-import { prices, transactions } from '../db/schema.ts';
-import { getActiveTickers } from '../db/queries.ts';
-import { createFinnhubClient } from '@firma/finnhub';
-
-// ── helpers ───────────────────────────────────────────────────────────────────
+import { apiFetch } from '../api.ts';
+import { requireAuth } from '../auth-guard.ts';
 
 const parsePositiveFloat = (val: string) => {
   const n = parseFloat(val);
@@ -31,42 +26,26 @@ const guard = <T>(value: T | symbol): T => {
   return value as T;
 };
 
-// ── current price resolution ──────────────────────────────────────────────────
-
-const resolveCurrentPrice = async (
-  db: Db,
-  ticker: string,
-  apiKey: string,
-): Promise<number | null> => {
-  const cached = db.select({ currentPrice: prices.currentPrice })
-    .from(prices)
-    .where(eq(prices.ticker, ticker))
-    .get();
-
-  if (cached) return cached.currentPrice;
-
+const resolveCurrentPrice = async (ticker: string, token: string): Promise<number | null> => {
   const s = spinner();
   s.start('현재가 조회 중...');
   try {
-    const client = createFinnhubClient(apiKey);
-    const data = await client.getStockData(ticker);
-    s.stop(`현재가: $${data.currentPrice.toFixed(2)}`);
-    return data.currentPrice;
+    const { currentPrice } = await apiFetch<{ currentPrice: number }>(`/api/prices/${ticker}`, { token });
+    s.stop(`현재가: $${currentPrice.toFixed(2)}`);
+    return currentPrice;
   } catch {
     s.stop('현재가 조회 실패 (직접 입력해주세요)');
     return null;
   }
 };
 
-// ── ticker selection ──────────────────────────────────────────────────────────
-
-const selectTicker = async (db: Db): Promise<string> => {
-  const activeTickers = getActiveTickers(db);
+const selectTicker = async (token: string): Promise<string> => {
+  const holdings = await apiFetch<Array<{ ticker: string }>>('/api/portfolio', { token });
+  const activeTickers = holdings.map(h => h.ticker);
 
   if (activeTickers.length === 0) {
     return (guard(await text({ message: '티커', placeholder: 'TSLA', validate: validateTicker })) as string)
-      .trim()
-      .toUpperCase();
+      .trim().toUpperCase();
   }
 
   const options = [
@@ -75,19 +54,17 @@ const selectTicker = async (db: Db): Promise<string> => {
   ];
 
   const selected = guard(await select({ message: '종목', options })) as string;
-
   if (selected !== '__new__') return selected;
 
   return (guard(await text({ message: '티커', placeholder: 'AAPL', validate: validateTicker })) as string)
-    .trim()
-    .toUpperCase();
+    .trim().toUpperCase();
 };
 
-// ── entry ─────────────────────────────────────────────────────────────────────
+export const addCommand = async () => {
+  const { token } = requireAuth();
 
-export const addCommand = async (db: Db, apiKey: string) => {
-  const ticker = await selectTicker(db);
-  const currentPrice = await resolveCurrentPrice(db, ticker, apiKey);
+  const ticker = await selectTicker(token);
+  const currentPrice = await resolveCurrentPrice(ticker, token);
   const priceHint = currentPrice ? pc.dim(` (현재가 $${currentPrice.toFixed(2)})`) : '';
 
   const type = guard(await select({
@@ -116,15 +93,18 @@ export const addCommand = async (db: Db, apiKey: string) => {
     initialValue: today,
   })) as string;
 
-  db.insert(transactions).values({
-    ticker,
-    type,
-    shares: parsePositiveFloat(sharesInput)!,
-    price: parsePositiveFloat(priceInput)!,
-    currency: 'USD',
-    date: dateInput.trim() || today,
-    createdAt: new Date().toISOString(),
-  }).run();
+  await apiFetch('/api/transactions', {
+    method: 'POST',
+    token,
+    body: {
+      ticker,
+      type,
+      shares: parsePositiveFloat(sharesInput)!,
+      price: parsePositiveFloat(priceInput)!,
+      currency: 'USD',
+      date: dateInput.trim() || today,
+    },
+  });
 
   const typeLabel = type === 'buy' ? pc.green('매수') : pc.red('매도');
   log.success(`${pc.bold(ticker)} ${typeLabel} ${sharesInput}주 @ $${priceInput} (${dateInput})`);
