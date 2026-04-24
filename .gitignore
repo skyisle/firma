@@ -1,7 +1,9 @@
 node_modules/
 dist/
+.next/
 *.db
 .env
+.env.local
 .yarn/cache
 .yarn/unplugged
 .yarn/build-state.yml

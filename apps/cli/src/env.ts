@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { assert } from './utils/assert.ts';
+import { assert } from '@firma/utils';
 
 export type Env = {
   FINNHUB_API_KEY: string;

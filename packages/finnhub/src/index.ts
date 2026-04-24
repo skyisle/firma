@@ -1,3 +1,4 @@
+export type { StockData } from './types.ts';
 import type { Metric, Profile, Quote, StockData } from './types.ts';
 
 const BASE_URL = 'https://finnhub.io/api/v1';

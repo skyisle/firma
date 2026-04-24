@@ -3,8 +3,8 @@ import pc from 'picocolors';
 import type { Db } from '../db/index.ts';
 import { prices } from '../db/schema.ts';
 import { getActiveTickers } from '../db/queries.ts';
-import { createFinnhubClient } from '../services/finnhub/index.ts';
-import type { StockData } from '../services/finnhub/types.ts';
+import { createFinnhubClient } from '@firma/finnhub';
+import type { StockData } from '@firma/finnhub';
 
 const upsertPrice = (db: Db, data: StockData) =>
   db

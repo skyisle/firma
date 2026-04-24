@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '../db/index.ts';
 import { prices, transactions } from '../db/schema.ts';
 import { getActiveTickers } from '../db/queries.ts';
-import { createFinnhubClient } from '../services/finnhub/index.ts';
+import { createFinnhubClient } from '@firma/finnhub';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

@@ -1,0 +1,31 @@
+{
+  "name": "@firma/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "firma": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsup src/index.ts --format esm --minify",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.9.1",
+    "@firma/finnhub": "workspace:*",
+    "@firma/utils": "workspace:*",
+    "better-sqlite3": "^11.9.1",
+    "commander": "^13.1.0",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.15.3",
+    "drizzle-kit": "^0.31.10",
+    "tsup": "^8.4.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3"
+  }
+}
