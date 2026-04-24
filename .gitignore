@@ -4,6 +4,7 @@ dist/
 *.db
 .env
 .env.local
+!.env.local.example
 .yarn/cache
 .yarn/unplugged
 .yarn/build-state.yml
