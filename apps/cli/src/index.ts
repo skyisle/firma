@@ -7,6 +7,8 @@ import { createDatabase } from './db/index.ts';
 import { syncCommand } from './commands/sync.ts';
 import { addCommand } from './commands/add.ts';
 import { portfolioCommand } from './commands/portfolio.ts';
+import { signupCommand } from './commands/auth/signup.ts';
+import { loginCommand } from './commands/auth/login.ts';
 
 const db = createDatabase();
 const program = new Command();
@@ -15,6 +17,26 @@ program
   .name('firma')
   .description('Personal asset tracker for overseas investors')
   .version('0.1.0');
+
+const auth = program.command('auth').description('Manage authentication');
+
+auth
+  .command('signup')
+  .description('Create a new Firma account')
+  .action(async () => {
+    intro(pc.bgCyan(pc.black(' firma auth signup ')));
+    await signupCommand();
+    outro('Done');
+  });
+
+auth
+  .command('login')
+  .description('Log in to your Firma account')
+  .action(async () => {
+    intro(pc.bgCyan(pc.black(' firma auth login ')));
+    await loginCommand();
+    outro('Done');
+  });
 
 program
   .command('sync')
