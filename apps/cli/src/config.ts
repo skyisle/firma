@@ -1,6 +1,6 @@
 import { homedir } from 'os';
 import { join } from 'path';
-import { mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 
 const CONFIG_DIR = join(homedir(), '.firma');
 const CONFIG_PATH = join(CONFIG_DIR, 'config.json');
@@ -26,7 +26,5 @@ export const writeConfig = (config: Config): void => {
 };
 
 export const clearConfig = (): void => {
-  try {
-    writeFileSync(CONFIG_PATH, '{}');
-  } catch {}
+  try { unlinkSync(CONFIG_PATH); } catch {}
 };

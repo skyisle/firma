@@ -28,7 +28,7 @@ const mergeStockData = (
   metric: Metric,
 ): StockData => ({
   ticker,
-  name: profile.name,
+  name: profile.name ?? ticker,
   exchange: profile.exchange,
   currency: profile.currency,
   currentPrice: quote.c,

@@ -8,8 +8,11 @@ import { portfolioCommand } from './commands/portfolio.ts';
 import { balanceCommand } from './commands/balance.ts';
 import { flowCommand } from './commands/flow.ts';
 import { settleCommand } from './commands/settle.ts';
+import { txnsCommand } from './commands/txns.ts';
+import { reportCommand } from './commands/report.ts';
 import { loginCommand } from './commands/auth/login.ts';
 import { whoamiCommand } from './commands/auth/whoami.ts';
+import { logoutCommand } from './commands/auth/logout.ts';
 
 const program = new Command();
 
@@ -35,6 +38,15 @@ auth
   .action(() => {
     intro(pc.bgCyan(pc.black(' firma auth whoami ')));
     whoamiCommand();
+    outro('Done');
+  });
+
+auth
+  .command('logout')
+  .description('Log out and clear saved credentials')
+  .action(() => {
+    intro(pc.bgCyan(pc.black(' firma auth logout ')));
+    logoutCommand();
     outro('Done');
   });
 
@@ -90,6 +102,26 @@ program
   .action(async () => {
     intro(pc.bgCyan(pc.black(' firma settle ')));
     await settleCommand();
+    outro('Done');
+  });
+
+program
+  .command('report [target]')
+  .alias('r')
+  .description('Show reports: balance, flow, or combined (default)')
+  .action(async (target?: string) => {
+    intro(pc.bgCyan(pc.black(' firma report ')));
+    await reportCommand(target);
+    outro('Done');
+  });
+
+program
+  .command('txns [ticker]')
+  .alias('t')
+  .description('List transactions, optionally filtered by ticker')
+  .action(async (ticker?: string) => {
+    intro(pc.bgCyan(pc.black(' firma txns ')));
+    await txnsCommand(ticker);
     outro('Done');
   });
 

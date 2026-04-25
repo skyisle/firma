@@ -45,14 +45,14 @@ const renderTable = (items: PortfolioItem[]) => {
     return [
       pc.bold(item.ticker.padEnd(COL.TICKER)),
       fmt.shares(item.shares).padEnd(COL.SHARES),
-      fmt.usd(item.avgPrice).padEnd(COL.AVG),
+      (item.avgPrice != null ? fmt.usd(item.avgPrice) : pc.dim('─')).padEnd(COL.AVG),
       (item.currentPrice != null ? fmt.usd(item.currentPrice) : pc.dim('─')).padEnd(COL.PRICE),
       item.pnl != null ? colorPnl(item.pnl, pnlText) : pnlText,
     ].join('  ');
   });
 
-  const totalCost = items.reduce((s, i) => s + i.costBasis, 0);
-  const totalValue = items.reduce((s, i) => s + (i.marketValue ?? i.costBasis), 0);
+  const totalCost = items.reduce((s, i) => s + (i.costBasis ?? 0), 0);
+  const totalValue = items.reduce((s, i) => s + (i.marketValue ?? i.costBasis ?? 0), 0);
   const totalPnl = totalValue - totalCost;
   const totalPnlPct = (totalPnl / totalCost) * 100;
 
