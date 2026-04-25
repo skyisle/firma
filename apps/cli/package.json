@@ -1,6 +1,6 @@
 {
   "name": "firma-app",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "description": "Local-first, AI-native CLI asset tracker for overseas stock investors. Built-in MCP server for Claude Desktop.",
   "keywords": [
@@ -49,7 +49,6 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.9.1",
-    "@supabase/supabase-js": "^2.104.1",
     "better-sqlite3": "^12.9.0",
     "commander": "^13.1.0",
     "drizzle-orm": "^0.45.2",

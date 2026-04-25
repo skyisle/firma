@@ -18,9 +18,6 @@ import { showFinancialsCommand } from './commands/financials.ts';
 import { showEarningsCommand } from './commands/earnings.ts';
 import { reportCommand, type Currency } from './commands/report.ts';
 
-import { loginCommand } from './commands/auth/login.ts';
-import { whoamiCommand } from './commands/auth/whoami.ts';
-import { logoutCommand } from './commands/auth/logout.ts';
 import { mcpInstallCommand } from './commands/mcp.ts';
 import { setConfigValue, readConfig } from './config.ts';
 
@@ -39,22 +36,7 @@ const handleFatalError = (err: unknown) => {
 process.on('unhandledRejection', handleFatalError);
 process.on('uncaughtException', handleFatalError);
 
-const UNGUARDED = new Set(['login', 'logout', 'whoami', 'set', 'get', 'install']);
-
 const program = new Command();
-
-program.hook('preAction', (_thisCommand, actionCommand) => {
-  if (UNGUARDED.has(actionCommand.name())) return;
-  const config = readConfig();
-  if (!config?.access_token) {
-    if (jsonMode) {
-      process.stdout.write(JSON.stringify({ error: 'Not logged in. Run: firma auth login' }) + '\n');
-    } else {
-      log.error('Not logged in. Run ' + pc.bold('firma auth login') + ' to authenticate.');
-    }
-    process.exit(1);
-  }
-});
 
 const wrap = <Args extends unknown[]>(
   label: string,
@@ -79,7 +61,7 @@ const wrapMaybeJson = <Args extends unknown[]>(
 program
   .name('firma')
   .description('Personal asset tracker for overseas investors')
-  .version('0.3.0');
+  .version('0.4.0');
 
 // ── add ────────────────────────────────────────────────
 const add = program.command('add').description('Record a new entry');
@@ -246,15 +228,6 @@ program
   .action(wrapMaybeJson('firma sync',
     (opts: { json?: boolean }) => syncCommand({ json: opts.json ?? false }),
     (opts) => opts.json ?? false));
-
-// ── auth ───────────────────────────────────────────────
-const auth = program.command('auth').description('Manage authentication');
-auth.command('login').description('Log in to your Firma account')
-  .action(wrap('firma auth login', loginCommand));
-auth.command('whoami').description('Show currently logged-in account')
-  .action(wrap('firma auth whoami', whoamiCommand));
-auth.command('logout').description('Log out and clear saved credentials')
-  .action(wrap('firma auth logout', logoutCommand));
 
 // ── config ─────────────────────────────────────────────
 const config = program.command('config').description('Manage local configuration');

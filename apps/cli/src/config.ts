@@ -1,15 +1,11 @@
 import { homedir } from 'os';
 import { join } from 'path';
-import { mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 
 const CONFIG_DIR = join(homedir(), '.firma');
 const CONFIG_PATH = join(CONFIG_DIR, 'config.json');
 
 type Config = {
-  access_token?: string;
-  refresh_token?: string;
-  user?: { id: string; email: string };
-  server_url?: string;
   finnhub_api_key?: string;
   db_path?: string;
 };
@@ -30,8 +26,4 @@ export const writeConfig = (config: Config) => {
 export const setConfigValue = (key: keyof Config, value: string) => {
   const config = readConfig() ?? {};
   writeConfig({ ...config, [key]: value });
-};
-
-export const clearConfig = () => {
-  try { unlinkSync(CONFIG_PATH); } catch {}
 };
