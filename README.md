@@ -5,8 +5,12 @@
 <h1 align="center">firma</h1>
 
 <p align="center">
-  <strong>The asset tracker that talks back.</strong><br/>
-  A local-first, AI-native CLI for overseas stock investors.
+  <strong>You earned well this year.<br/>Do you know where it went?</strong>
+</p>
+
+<p align="center">
+  Just ask Claude.<br/>
+  <span>A local-first, AI-native CLI for overseas stock investors.</span>
 </p>
 
 <p align="center">
@@ -82,8 +86,7 @@ $ firma show portfolio
 # 1. Install
 npm install -g firma-app
 
-# 2. Sign in and set your Finnhub key (free at finnhub.io)
-firma auth login
+# 2. Set your Finnhub key (free at finnhub.io)
 firma config set finnhub-key YOUR_KEY
 
 # 3. Connect Claude Desktop
@@ -134,7 +137,6 @@ Three verb groups: **`add`** (input), **`show`** (read, `--json` everywhere), **
 | `firma delete balance / flow [period]` | Delete all entries for a period (alias `rm`) |
 | `firma sync` | Fetch latest prices from Finnhub |
 | `firma mcp install` | Register MCP server in Claude Desktop |
-| `firma auth login` | Sign in with Google |
 | `firma config set finnhub-key KEY` | Set Finnhub API key |
 | `firma config set db-path PATH` | Use a custom database location |
 
