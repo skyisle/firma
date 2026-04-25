@@ -37,5 +37,5 @@ jobs:
         run: |
           unset NODE_AUTH_TOKEN
           unset NPM_CONFIG_USERCONFIG
-          npm publish --access public --provenance
+          npm publish --access public --provenance --loglevel verbose
         working-directory: apps/cli
