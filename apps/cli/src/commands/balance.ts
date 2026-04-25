@@ -8,22 +8,37 @@ import { inputCategoryGroup, currentPeriod, periodEndDate, printSummary, type En
 type PortfolioItem = { ticker: string; marketValue: number | null; currency: string };
 type ExistingEntry = { category: string; amount: number };
 
+const fetchUsdKrw = async (token: string): Promise<number | null> => {
+  try {
+    const { usdKrw } = await apiFetch<{ usdKrw: number }>('/api/fx', { token });
+    return usdKrw;
+  } catch {
+    return null;
+  }
+};
+
 const getOverseasStockKRW = async (token: string): Promise<number> => {
   const portfolio = await apiFetch<PortfolioItem[]>('/api/portfolio', { token });
   const totalUSD = portfolio.reduce((s, p) => s + (p.marketValue ?? 0), 0);
   if (totalUSD === 0) return 0;
 
+  const autoRate = await fetchUsdKrw(token);
+
   log.message(pc.dim(`\n  Portfolio value: $${totalUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}`));
 
+  if (autoRate) {
+    log.message(pc.dim(`  USD/KRW: ${autoRate.toFixed(2)}  (auto)`));
+    return Math.round(totalUSD * autoRate);
+  }
+
+  // Fallback: manual input
   const rateInput = await text({
-    message: 'USD/KRW exchange rate',
+    message: 'USD/KRW exchange rate (auto-fetch failed)',
     placeholder: '1380',
     validate: v => (!v.trim() || isNaN(Number(v))) ? 'Enter a valid rate' : undefined,
   });
-
   if (isCancel(rateInput)) { cancel('Cancelled'); process.exit(0); }
-  const rate = Number(rateInput);
-  return Math.round(totalUSD * rate);
+  return Math.round(totalUSD * Number(rateInput));
 };
 
 export const balanceCommand = async (period?: string) => {
