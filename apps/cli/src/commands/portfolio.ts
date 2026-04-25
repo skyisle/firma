@@ -65,7 +65,7 @@ const renderTable = (items: PortfolioItem[]) => {
 
   const syncedAt = items.find(i => i.syncedAt)?.syncedAt;
   const lastSynced = syncedAt
-    ? `\n${pc.dim('Synced'.padEnd(LBL) + new Date(syncedAt).toLocaleString('ko-KR'))}`
+    ? `\n${pc.dim('Synced'.padEnd(LBL) + new Date(syncedAt).toLocaleString('en-US'))}`
     : '';
 
   note(`${header}\n${divider}\n${rows.join('\n')}\n${divider}\n${summary}${lastSynced}`, 'Portfolio');
