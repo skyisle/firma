@@ -17,7 +17,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
 
       - name: Install build tools
         run: sudo apt-get install -y build-essential python3
@@ -35,7 +34,8 @@ jobs:
         run: yarn workspace firma-app build
 
       - name: Publish
-        run: npm publish --access public --provenance
+        run: |
+          unset NODE_AUTH_TOKEN
+          unset NPM_CONFIG_USERCONFIG
+          npm publish --access public --provenance
         working-directory: apps/cli
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
