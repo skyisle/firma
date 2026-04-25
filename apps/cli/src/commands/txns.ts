@@ -54,35 +54,39 @@ export const txnsCommand = async (ticker?: string, { json = false } = {}) => {
   const divider = pc.dim('─'.repeat(totalWidth));
 
   const ordered = showAvg ? [...txns].reverse() : txns;
-  let shares = 0, costShares = 0, totalCost = 0;
 
-  const rowsAsc = ordered.map(t => {
-    const colorType = TYPE_COLOR[t.type] ?? ((s: string) => s);
-    const total = t.shares * t.price;
+  const { rows: rowsAsc } = ordered.reduce(
+    ({ shares, costShares, totalCost, rows }, t) => {
+      const colorType = TYPE_COLOR[t.type] ?? ((s: string) => s);
+      const total = t.shares * t.price;
 
-    if (t.type === 'buy') {
-      shares += t.shares; costShares += t.shares; totalCost += total;
-    } else if (t.type === 'sell') {
-      const prev = shares; shares -= t.shares;
-      costShares = prev > 0 ? costShares * (shares / prev) : 0;
-      totalCost = costShares > 0 ? costShares * (totalCost / costShares) : 0;
-    } else if (t.type === 'deposit' && t.price > 0) {
-      shares += t.shares; costShares += t.shares; totalCost += t.shares * t.price;
-    } else if (t.type === 'deposit') {
-      shares += t.shares;
-    }
+      let ns = shares, nc = costShares, nt = totalCost;
+      if (t.type === 'buy') {
+        ns = shares + t.shares; nc = costShares + t.shares; nt = totalCost + total;
+      } else if (t.type === 'sell') {
+        ns = shares - t.shares;
+        const ratio = shares > 0 ? ns / shares : 0;
+        nc = costShares * ratio; nt = totalCost * ratio;
+      } else if (t.type === 'deposit' && t.price > 0) {
+        ns = shares + t.shares; nc = costShares + t.shares; nt = totalCost + t.shares * t.price;
+      } else if (t.type === 'deposit') {
+        ns = shares + t.shares;
+      }
 
-    const avg = costShares > 0 ? totalCost / costShares : 0;
-    return [
-      pc.dim(t.date.padEnd(COL.DATE)),
-      ...(showTicker ? [pc.bold(t.ticker.padEnd(COL.TICKER))] : []),
-      colorType(t.type.padEnd(COL.TYPE)),
-      fmt.num(t.shares).padEnd(COL.SHARES),
-      (t.price > 0 ? fmt.usd(t.price) : pc.dim('─')).padEnd(COL.PRICE),
-      (total > 0 ? fmt.usd(total) : pc.dim('─')).padEnd(COL.TOTAL),
-      ...(showAvg ? [avg > 0 ? pc.bold(fmt.usd(avg)) : pc.dim('─')] : []),
-    ].join('  ');
-  });
+      const avg = nc > 0 ? nt / nc : 0;
+      const row = [
+        pc.dim(t.date.padEnd(COL.DATE)),
+        ...(showTicker ? [pc.bold(t.ticker.padEnd(COL.TICKER))] : []),
+        colorType(t.type.padEnd(COL.TYPE)),
+        fmt.num(t.shares).padEnd(COL.SHARES),
+        (t.price > 0 ? fmt.usd(t.price) : pc.dim('─')).padEnd(COL.PRICE),
+        (total > 0 ? fmt.usd(total) : pc.dim('─')).padEnd(COL.TOTAL),
+        ...(showAvg ? [avg > 0 ? pc.bold(fmt.usd(avg)) : pc.dim('─')] : []),
+      ].join('  ');
+      return { shares: ns, costShares: nc, totalCost: nt, rows: [...rows, row] };
+    },
+    { shares: 0, costShares: 0, totalCost: 0, rows: [] as string[] },
+  );
 
   const rows = showAvg ? rowsAsc.reverse() : rowsAsc;
   const title = ticker ? `Transactions · ${ticker.toUpperCase()}` : 'Transactions';

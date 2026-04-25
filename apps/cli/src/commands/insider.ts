@@ -16,7 +16,7 @@ const fmtShares = (n: number) => Math.abs(n).toLocaleString('en-US');
 const fmtPrice = (n: number) =>
   `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-const fmtValue = (change: number, price: number): string => {
+const fmtValue = (change: number, price: number) => {
   const v = Math.abs(change) * price;
   if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
   if (v >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;

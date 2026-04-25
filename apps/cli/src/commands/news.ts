@@ -5,7 +5,7 @@ import { readConfig } from '../config.ts';
 
 const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
 
-const relativeTime = (unixSec: number): string => {
+const relativeTime = (unixSec: number) => {
   const diffH = Math.floor((Date.now() - unixSec * 1000) / 3_600_000);
   if (diffH < 1) return 'just now';
   if (diffH < 24) return `${diffH}h ago`;

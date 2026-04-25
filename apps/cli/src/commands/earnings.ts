@@ -11,19 +11,19 @@ const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
 const visLen = (s: string) => s.replace(/\x1B\[[0-9;]*m/g, '').length;
 const padAnsi = (s: string, n: number) => s + ' '.repeat(Math.max(0, n - visLen(s)));
 
-const fmtBig = (n: number | null): string => {
+const fmtBig = (n: number | null) => {
   if (n == null) return '─';
   if (Math.abs(n) >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
   if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
   return `$${n.toFixed(2)}`;
 };
 
-const fmtEps = (n: number | null): string =>
+const fmtEps = (n: number | null) =>
   n == null ? '─' : `$${n.toFixed(2)}`;
 
 const HOUR_LABEL: Record<string, string> = { bmo: 'BMO', amc: 'AMC', dmh: 'Intra' };
 
-const beatMiss = (actual: number | null, estimate: number | null): string => {
+const beatMiss = (actual: number | null, estimate: number | null) => {
   if (actual == null || estimate == null || estimate === 0) return '';
   const beat = actual >= estimate;
   const pct  = ((actual - estimate) / Math.abs(estimate)) * 100;

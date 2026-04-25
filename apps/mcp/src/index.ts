@@ -284,9 +284,11 @@ server.tool(
   },
 );
 
-const findConcept = (items: FinancialLineItem[], ...concepts: string[]): number | null => {
+const findConcept = (items: FinancialLineItem[], ...concepts: string[]) => {
   for (const concept of concepts) {
-    const hit = items.find(i => i.concept === concept);
+    const hit = concept.startsWith('*')
+      ? items.find(i => i.concept.endsWith(concept.slice(1)))
+      : items.find(i => i.concept === concept);
     if (hit != null) return hit.value;
   }
   return null;
@@ -302,22 +304,30 @@ const extractFinancialPeriod = (p: FinancialPeriod) => {
     endDate:         p.endDate,
     filedDate:       p.filedDate,
     revenue:         findConcept(ic,
-                       'us-gaap/Revenues',
-                       'us-gaap/RevenueFromContractWithCustomerExcludingAssessedTax',
-                       'us-gaap/SalesRevenueNet',
+                       'us-gaap_Revenues',
+                       'us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax',
+                       'us-gaap_SalesRevenueNet',
+                       'us-gaap_SalesRevenueGoodsNet',
                      ),
-    grossProfit:     findConcept(ic, 'us-gaap/GrossProfit'),
-    operatingIncome: findConcept(ic, 'us-gaap/OperatingIncomeLoss'),
-    netIncome:       findConcept(ic, 'us-gaap/NetIncomeLoss', 'us-gaap/ProfitLoss'),
-    epsDiluted:      findConcept(ic, 'us-gaap/EarningsPerShareDiluted', 'us-gaap/EarningsPerShareBasic'),
-    operatingCF:     findConcept(cf, 'us-gaap/NetCashProvidedByUsedInOperatingActivities'),
-    capex:           findConcept(cf, 'us-gaap/PaymentsToAcquirePropertyPlantAndEquipment'),
-    totalAssets:     findConcept(bs, 'us-gaap/Assets'),
+    grossProfit:     findConcept(ic, 'us-gaap_GrossProfit'),
+    operatingIncome: findConcept(ic, 'us-gaap_OperatingIncomeLoss'),
+    netIncome:       findConcept(ic, 'us-gaap_NetIncomeLoss', 'us-gaap_ProfitLoss'),
+    epsDiluted:      findConcept(ic, 'us-gaap_EarningsPerShareDiluted', 'us-gaap_EarningsPerShareBasic'),
+    operatingCF:     findConcept(cf, 'us-gaap_NetCashProvidedByUsedInOperatingActivities'),
+    capex:           findConcept(cf, 'us-gaap_PaymentsToAcquirePropertyPlantAndEquipment'),
+    totalAssets:     findConcept(bs, 'us-gaap_Assets'),
     cash:            findConcept(bs,
-                       'us-gaap/CashAndCashEquivalentsAtCarryingValue',
-                       'us-gaap/CashCashEquivalentsAndShortTermInvestments',
+                       'us-gaap_CashAndCashEquivalentsAtCarryingValue',
+                       'us-gaap_CashCashEquivalentsAndShortTermInvestments',
                      ),
-    totalDebt:       findConcept(bs, 'us-gaap/LongTermDebt', 'us-gaap/LongTermDebtNoncurrent'),
+    totalDebt:       findConcept(bs,
+                       'us-gaap_LongTermDebt',
+                       'us-gaap_LongTermDebtNoncurrent',
+                       'us-gaap_LongTermDebtAndCapitalLeaseObligations',
+                       'us-gaap_DebtLongtermAndShorttermCombinedAmount',
+                       '*LongTermDebtNoncurrent',
+                       '*LongTermDebtAndFinanceLeasesNoncurrent',
+                     ),
   };
 };
 

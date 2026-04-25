@@ -4,15 +4,17 @@ import { createFinnhubClient } from '@firma/finnhub';
 import type { FinancialLineItem, FinancialPeriod } from '@firma/finnhub';
 import { readConfig } from '../config.ts';
 
-const find = (items: FinancialLineItem[], ...concepts: string[]): number | null => {
+const find = (items: FinancialLineItem[], ...concepts: string[]) => {
   for (const concept of concepts) {
-    const hit = items.find(i => i.concept === concept);
+    const hit = concept.startsWith('*')
+      ? items.find(i => i.concept.endsWith(concept.slice(1)))
+      : items.find(i => i.concept === concept);
     if (hit != null) return hit.value;
   }
   return null;
 };
 
-const fmtBig = (n: number | null): string => {
+const fmtBig = (n: number | null) => {
   if (n == null) return '─';
   const sign = n < 0 ? '-' : '';
   const abs  = Math.abs(n);
@@ -22,10 +24,10 @@ const fmtBig = (n: number | null): string => {
   return `${sign}$${abs.toLocaleString('en-US')}`;
 };
 
-const fmtEps = (n: number | null): string =>
+const fmtEps = (n: number | null) =>
   n == null ? '─' : `$${n.toFixed(2)}`;
 
-const periodLabel = (p: FinancialPeriod): string =>
+const periodLabel = (p: FinancialPeriod) =>
   p.quarter === 0 ? `FY ${p.year}` : `Q${p.quarter} ${p.year}`;
 
 type ExtractedPeriod = {
@@ -44,7 +46,7 @@ type ExtractedPeriod = {
   totalDebt:      number | null;
 };
 
-const extractPeriod = (p: FinancialPeriod): ExtractedPeriod => {
+const extractPeriod = (p: FinancialPeriod) => {
   const ic = p.report?.ic ?? [];
   const cf = p.report?.cf ?? [];
   const bs = p.report?.bs ?? [];
@@ -53,22 +55,30 @@ const extractPeriod = (p: FinancialPeriod): ExtractedPeriod => {
     form:            p.form,
     filedDate:       p.filedDate,
     revenue:         find(ic,
-                       'us-gaap/Revenues',
-                       'us-gaap/RevenueFromContractWithCustomerExcludingAssessedTax',
-                       'us-gaap/SalesRevenueNet',
+                       'us-gaap_Revenues',
+                       'us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax',
+                       'us-gaap_SalesRevenueNet',
+                       'us-gaap_SalesRevenueGoodsNet',
                      ),
-    grossProfit:     find(ic, 'us-gaap/GrossProfit'),
-    operatingIncome: find(ic, 'us-gaap/OperatingIncomeLoss'),
-    netIncome:       find(ic, 'us-gaap/NetIncomeLoss', 'us-gaap/ProfitLoss'),
-    epsDiluted:      find(ic, 'us-gaap/EarningsPerShareDiluted', 'us-gaap/EarningsPerShareBasic'),
-    operatingCF:     find(cf, 'us-gaap/NetCashProvidedByUsedInOperatingActivities'),
-    capex:           find(cf, 'us-gaap/PaymentsToAcquirePropertyPlantAndEquipment'),
-    totalAssets:     find(bs, 'us-gaap/Assets'),
+    grossProfit:     find(ic, 'us-gaap_GrossProfit'),
+    operatingIncome: find(ic, 'us-gaap_OperatingIncomeLoss'),
+    netIncome:       find(ic, 'us-gaap_NetIncomeLoss', 'us-gaap_ProfitLoss'),
+    epsDiluted:      find(ic, 'us-gaap_EarningsPerShareDiluted', 'us-gaap_EarningsPerShareBasic'),
+    operatingCF:     find(cf, 'us-gaap_NetCashProvidedByUsedInOperatingActivities'),
+    capex:           find(cf, 'us-gaap_PaymentsToAcquirePropertyPlantAndEquipment'),
+    totalAssets:     find(bs, 'us-gaap_Assets'),
     cash:            find(bs,
-                       'us-gaap/CashAndCashEquivalentsAtCarryingValue',
-                       'us-gaap/CashCashEquivalentsAndShortTermInvestments',
+                       'us-gaap_CashAndCashEquivalentsAtCarryingValue',
+                       'us-gaap_CashCashEquivalentsAndShortTermInvestments',
                      ),
-    totalDebt:       find(bs, 'us-gaap/LongTermDebt', 'us-gaap/LongTermDebtNoncurrent'),
+    totalDebt:       find(bs,
+                       'us-gaap_LongTermDebt',
+                       'us-gaap_LongTermDebtNoncurrent',
+                       'us-gaap_LongTermDebtAndCapitalLeaseObligations',
+                       'us-gaap_DebtLongtermAndShorttermCombinedAmount',
+                       '*LongTermDebtNoncurrent',
+                       '*LongTermDebtAndFinanceLeasesNoncurrent',
+                     ),
   };
 };
 

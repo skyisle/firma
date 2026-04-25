@@ -13,7 +13,7 @@ const CURRENCY_SYMBOL: Record<Currency, string> = {
   KRW: '₩', USD: '$', EUR: '€', JPY: '¥', CNY: '¥', GBP: '£',
 };
 
-const fmtAmount = (amountKrw: number, currency: Currency, rate: number): string => {
+const fmtAmount = (amountKrw: number, currency: Currency, rate: number) => {
   const v = amountKrw * rate;
   const sym = CURRENCY_SYMBOL[currency];
   if (currency === 'KRW') return `${sym}${Math.round(v / 10000).toLocaleString('ko-KR')}만`;
@@ -70,31 +70,27 @@ const BALANCE_LABEL: Record<string, string> = {
 };
 
 
-const aggregateBalance = (entries: BalanceEntry[]): BalancePeriod[] => {
-  const map = new Map<string, { assets: number; liabilities: number }>();
-  for (const e of entries) {
-    const p = map.get(e.period) ?? { assets: 0, liabilities: 0 };
-    if (e.type === 'asset') p.assets += e.amount;
-    else if (e.type === 'liability') p.liabilities += e.amount;
-    map.set(e.period, p);
-  }
-  return [...map.entries()]
+const aggregateBalance = (entries: BalanceEntry[]) =>
+  [...entries.reduce((map, { period, type, amount }) => {
+    const prev = map.get(period) ?? { assets: 0, liabilities: 0 };
+    return map.set(period, {
+      assets:      prev.assets      + (type === 'asset'      ? amount : 0),
+      liabilities: prev.liabilities + (type === 'liability'  ? amount : 0),
+    });
+  }, new Map<string, { assets: number; liabilities: number }>()).entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([period, v]) => ({ period, ...v, netWorth: v.assets - v.liabilities }));
-};
+    .map(([period, { assets, liabilities }]) => ({ period, assets, liabilities, netWorth: assets - liabilities }));
 
-const aggregateFlow = (entries: FlowEntry[]): FlowPeriod[] => {
-  const map = new Map<string, { income: number; expenses: number }>();
-  for (const e of entries) {
-    const p = map.get(e.period) ?? { income: 0, expenses: 0 };
-    if (e.type === 'income') p.income += e.amount;
-    else if (e.type === 'expense') p.expenses += e.amount;
-    map.set(e.period, p);
-  }
-  return [...map.entries()]
+const aggregateFlow = (entries: FlowEntry[]) =>
+  [...entries.reduce((map, { period, type, amount }) => {
+    const prev = map.get(period) ?? { income: 0, expenses: 0 };
+    return map.set(period, {
+      income:   prev.income   + (type === 'income'  ? amount : 0),
+      expenses: prev.expenses + (type === 'expense' ? amount : 0),
+    });
+  }, new Map<string, { income: number; expenses: number }>()).entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([period, v]) => ({ period, ...v, netFlow: v.income - v.expenses }));
-};
+    .map(([period, { income, expenses }]) => ({ period, income, expenses, netFlow: income - expenses }));
 
 
 const BREAKDOWN_BAR_W = 16;
