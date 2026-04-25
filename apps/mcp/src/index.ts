@@ -4,10 +4,13 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { eq, asc } from 'drizzle-orm';
 import { createFinnhubClient } from '@firma/finnhub';
+import type { FinancialLineItem, FinancialPeriod } from '@firma/finnhub';
 import {
   getDb, getFinnhubKey,
   transactions, balanceEntries, flowEntries, prices,
 } from './db.ts';
+
+const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
 
 const server = new McpServer({
   name: 'firma',
@@ -236,6 +239,163 @@ server.tool(
     }
 
     return ok({ synced: results.length, tickers });
+  },
+);
+
+// ── Market data tools ─────────────────────────────────────────────────────────
+
+server.tool(
+  'get_news',
+  'Fetch recent company news for a ticker from Finnhub',
+  {
+    ticker: z.string().describe('Stock ticker symbol (e.g. AAPL)'),
+    days:   z.number().int().min(1).max(30).default(7).describe('Days to look back (default: 7)'),
+    limit:  z.number().int().min(1).max(50).default(10).describe('Max articles to return (default: 10)'),
+  },
+  async ({ ticker, days, limit }) => {
+    const apiKey = getFinnhubKey();
+    if (!apiKey) return err('Finnhub API key not configured. Run: firma config set finnhub-key <key>');
+    try {
+      const sym    = ticker.toUpperCase();
+      const to     = toDateStr(new Date());
+      const from   = toDateStr(new Date(Date.now() - days * 86_400_000));
+      const client = createFinnhubClient(apiKey);
+      const all    = await client.getCompanyNews(sym, from, to);
+      return ok(all.slice(0, limit));
+    } catch (e) {
+      return err(e instanceof Error ? e.message : 'Failed to fetch news');
+    }
+  },
+);
+
+server.tool(
+  'get_insider_transactions',
+  'Fetch recent insider buy/sell transactions for a ticker from Finnhub. transactionCode: P=buy, S=sell, A=award, G=gift, M=exercise',
+  {
+    ticker: z.string().describe('Stock ticker symbol (e.g. AAPL)'),
+    limit:  z.number().int().min(1).max(100).default(20).describe('Max transactions to return (default: 20)'),
+  },
+  async ({ ticker, limit }) => {
+    const apiKey = getFinnhubKey();
+    if (!apiKey) return err('Finnhub API key not configured. Run: firma config set finnhub-key <key>');
+    try {
+      const client = createFinnhubClient(apiKey);
+      const res    = await client.getInsiderTransactions(ticker.toUpperCase());
+      return ok({ symbol: res.symbol, data: (res.data ?? []).slice(0, limit) });
+    } catch (e) {
+      return err(e instanceof Error ? e.message : 'Failed to fetch insider transactions');
+    }
+  },
+);
+
+// Extracts key financial metrics from a raw Finnhub FinancialPeriod
+const findConcept = (items: FinancialLineItem[], ...concepts: string[]): number | null => {
+  for (const concept of concepts) {
+    const hit = items.find(i => i.concept === concept);
+    if (hit != null) return hit.value;
+  }
+  return null;
+};
+
+const extractFinancialPeriod = (p: FinancialPeriod) => {
+  const ic = p.report?.ic ?? [];
+  const cf = p.report?.cf ?? [];
+  const bs = p.report?.bs ?? [];
+  return {
+    period:          p.quarter === 0 ? `FY ${p.year}` : `Q${p.quarter} ${p.year}`,
+    form:            p.form,
+    endDate:         p.endDate,
+    filedDate:       p.filedDate,
+    revenue:         findConcept(ic,
+                       'us-gaap/Revenues',
+                       'us-gaap/RevenueFromContractWithCustomerExcludingAssessedTax',
+                       'us-gaap/SalesRevenueNet',
+                     ),
+    grossProfit:     findConcept(ic, 'us-gaap/GrossProfit'),
+    operatingIncome: findConcept(ic, 'us-gaap/OperatingIncomeLoss'),
+    netIncome:       findConcept(ic, 'us-gaap/NetIncomeLoss', 'us-gaap/ProfitLoss'),
+    epsDiluted:      findConcept(ic, 'us-gaap/EarningsPerShareDiluted', 'us-gaap/EarningsPerShareBasic'),
+    operatingCF:     findConcept(cf, 'us-gaap/NetCashProvidedByUsedInOperatingActivities'),
+    capex:           findConcept(cf, 'us-gaap/PaymentsToAcquirePropertyPlantAndEquipment'),
+    totalAssets:     findConcept(bs, 'us-gaap/Assets'),
+    cash:            findConcept(bs,
+                       'us-gaap/CashAndCashEquivalentsAtCarryingValue',
+                       'us-gaap/CashCashEquivalentsAndShortTermInvestments',
+                     ),
+    totalDebt:       findConcept(bs, 'us-gaap/LongTermDebt', 'us-gaap/LongTermDebtNoncurrent'),
+  };
+};
+
+server.tool(
+  'get_financials',
+  'Fetch SEC-reported financials for a ticker. Returns key income statement, cash flow, and balance sheet metrics extracted from XBRL filings.',
+  {
+    ticker: z.string().describe('Stock ticker symbol (e.g. AAPL)'),
+    freq:   z.enum(['quarterly', 'annual']).default('quarterly'),
+    limit:  z.number().int().min(1).max(12).default(4).describe('Number of periods to return (default: 4)'),
+  },
+  async ({ ticker, freq, limit }) => {
+    const apiKey = getFinnhubKey();
+    if (!apiKey) return err('Finnhub API key not configured. Run: firma config set finnhub-key <key>');
+    try {
+      const client  = createFinnhubClient(apiKey);
+      const res     = await client.getFinancialsReported(ticker.toUpperCase(), freq);
+      const periods = (res.data ?? []).slice(0, limit).map(extractFinancialPeriod);
+      return ok({ symbol: ticker.toUpperCase(), freq, periods });
+    } catch (e) {
+      return err(e instanceof Error ? e.message : 'Failed to fetch financials');
+    }
+  },
+);
+
+server.tool(
+  'get_earnings',
+  'Fetch earnings calendar. Without a ticker, returns upcoming earnings for all held tickers. With a ticker, returns history + upcoming.',
+  {
+    ticker:  z.string().optional().describe('Ticker symbol. Omit to get upcoming earnings for all holdings.'),
+    weeks:   z.number().int().min(1).max(52).default(4).describe('Look-ahead window in weeks (default: 4)'),
+    history: z.boolean().default(false).describe('Include past quarters (only applies when ticker is provided)'),
+  },
+  async ({ ticker, weeks, history }) => {
+    const apiKey = getFinnhubKey();
+    if (!apiKey) return err('Finnhub API key not configured. Run: firma config set finnhub-key <key>');
+    try {
+      const client = createFinnhubClient(apiKey);
+      const today  = toDateStr(new Date());
+      const future = toDateStr(new Date(Date.now() + weeks * 7 * 86_400_000));
+
+      if (ticker) {
+        const from = history
+          ? toDateStr(new Date(Date.now() - 365 * 86_400_000))
+          : today;
+        const res = await client.getEarningsCalendar(from, future, ticker.toUpperCase());
+        return ok((res.earningsCalendar ?? []).sort((a, b) => b.date.localeCompare(a.date)));
+      }
+
+      // All holdings: get active tickers from DB
+      const db   = getDb();
+      const txns = db.select().from(transactions).all();
+      const net  = new Map<string, number>();
+      for (const t of txns) {
+        const cur = net.get(t.ticker) ?? 0;
+        if (t.type === 'buy' || t.type === 'deposit') net.set(t.ticker, cur + t.shares);
+        else if (t.type === 'sell') net.set(t.ticker, cur - t.shares);
+      }
+      const tickers = [...net.entries()].filter(([, s]) => s > 0).map(([t]) => t);
+
+      if (tickers.length === 0) return ok([]);
+
+      const results = await Promise.all(
+        tickers.map(t =>
+          client.getEarningsCalendar(today, future, t)
+            .then(r => r.earningsCalendar ?? [])
+            .catch(() => []),
+        ),
+      );
+      return ok(results.flat().sort((a, b) => a.date.localeCompare(b.date)));
+    } catch (e) {
+      return err(e instanceof Error ? e.message : 'Failed to fetch earnings');
+    }
   },
 );
 
