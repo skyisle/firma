@@ -98,8 +98,8 @@ server.tool(
 );
 
 server.tool(
-  'get_settle',
-  'Month-end settlement for a period: balance sheet + cash flow with computed totals (net_worth, net_flow). Defaults to the current month.',
+  'get_period_summary',
+  'Read-only summary for a period: balance sheet + cash flow entries with computed totals (net_worth, net_flow). Use this to review month-end settlement results after entries are recorded via set_balance_entry / set_flow_entry. Defaults to the current month.',
   { period: z.string().optional().describe('Period in YYYY-MM format (defaults to current month)') },
   async ({ period }) => {
     const db = getDb();
