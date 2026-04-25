@@ -79,7 +79,7 @@ const TYPE_OPTIONS: { value: TxnType; label: string; hint: string }[] = [
   { value: 'tax',      label: 'Tax',      hint: 'Tax withheld or paid' },
 ];
 
-export const addCommand = async () => {
+export const addTxnCommand = async () => {
   const repo = getRepository();
   const activeTickers = getActiveTickers(repo.transactions.getAll());
 

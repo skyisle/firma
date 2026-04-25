@@ -18,7 +18,7 @@ const fmt = {
 
 const COL = { ID: 6, DATE: 12, TICKER: 8, TYPE: 10, SHARES: 10, PRICE: 12, TOTAL: 14, AVG: 14 };
 
-export const txnsCommand = async (ticker?: string, { json = false } = {}) => {
+export const showTxnsCommand = async (ticker?: string, { json = false } = {}) => {
   const db = getDb();
   const all = ticker
     ? db.select().from(transactions).where(eq(transactions.ticker, ticker.toUpperCase())).orderBy(asc(transactions.date)).all()

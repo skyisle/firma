@@ -82,7 +82,7 @@ const extractPeriod = (p: FinancialPeriod) => {
   };
 };
 
-export const financialsCommand = async (
+export const showFinancialsCommand = async (
   ticker: string,
   { json = false, annual = false, limit = 4 } = {},
 ) => {

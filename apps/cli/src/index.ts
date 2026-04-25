@@ -2,25 +2,27 @@
 import { Command } from 'commander';
 import { intro, outro, log } from '@clack/prompts';
 import pc from 'picocolors';
+
 import { syncCommand } from './commands/sync.ts';
-import { addCommand } from './commands/add.ts';
-import { editCommand } from './commands/edit.ts';
-import { deleteCommand } from './commands/delete.ts';
-import { portfolioCommand } from './commands/portfolio.ts';
-import { balanceCommand } from './commands/balance.ts';
-import { flowCommand } from './commands/flow.ts';
-import { settleCommand } from './commands/settle.ts';
-import { txnsCommand } from './commands/txns.ts';
+import { addTxnCommand } from './commands/add.ts';
+import { editTxnCommand } from './commands/edit.ts';
+import { deleteTxnCommand } from './commands/delete.ts';
+import { addBalanceCommand, showBalanceCommand } from './commands/balance.ts';
+import { addFlowCommand, showFlowCommand } from './commands/flow.ts';
+import { addMonthlyCommand } from './commands/monthly.ts';
+import { showPortfolioCommand } from './commands/portfolio.ts';
+import { showTxnsCommand } from './commands/txns.ts';
+import { showNewsCommand } from './commands/news.ts';
+import { showInsiderCommand } from './commands/insider.ts';
+import { showFinancialsCommand } from './commands/financials.ts';
+import { showEarningsCommand } from './commands/earnings.ts';
 import { reportCommand, type Currency } from './commands/report.ts';
+
 import { loginCommand } from './commands/auth/login.ts';
 import { whoamiCommand } from './commands/auth/whoami.ts';
 import { logoutCommand } from './commands/auth/logout.ts';
-import { newsCommand } from './commands/news.ts';
-import { insiderCommand } from './commands/insider.ts';
-import { financialsCommand } from './commands/financials.ts';
-import { earningsCommand } from './commands/earnings.ts';
-import { setConfigValue, readConfig } from './config.ts';
 import { mcpInstallCommand } from './commands/mcp.ts';
+import { setConfigValue, readConfig } from './config.ts';
 
 const jsonMode = process.argv.includes('--json');
 
@@ -54,40 +56,182 @@ program.hook('preAction', (_thisCommand, actionCommand) => {
   }
 });
 
+const wrap = <Args extends unknown[]>(
+  label: string,
+  fn: (...args: Args) => Promise<void> | void,
+) => async (...args: Args) => {
+  intro(pc.bgCyan(pc.black(` ${label} `)));
+  await fn(...args);
+  outro('Done');
+};
+
+const wrapMaybeJson = <Args extends unknown[]>(
+  label: string,
+  fn: (...args: Args) => Promise<void> | void,
+  isJson: (...args: Args) => boolean,
+) => async (...args: Args) => {
+  const json = isJson(...args);
+  if (!json) intro(pc.bgCyan(pc.black(` ${label} `)));
+  await fn(...args);
+  if (!json) outro('Done');
+};
+
 program
   .name('firma')
   .description('Personal asset tracker for overseas investors')
-  .version('0.1.0');
+  .version('0.2.1');
 
+// ── add ────────────────────────────────────────────────
+const add = program.command('add').description('Record a new entry');
+
+add
+  .command('txn')
+  .description('Add a stock transaction (buy/sell/deposit/dividend/tax)')
+  .action(wrap('firma add txn', addTxnCommand));
+
+add
+  .command('balance')
+  .description('Record monthly asset & liability snapshot')
+  .option('-p, --period <period>', 'Period in YYYY-MM format')
+  .action(wrap('firma add balance', (opts: { period?: string }) => addBalanceCommand({ period: opts.period })));
+
+add
+  .command('flow')
+  .description('Record monthly income & expenses')
+  .option('-p, --period <period>', 'Period in YYYY-MM format')
+  .action(wrap('firma add flow', (opts: { period?: string }) => addFlowCommand({ period: opts.period })));
+
+add
+  .command('monthly')
+  .description('Month-end entry: balance sheet + cash flow in one flow')
+  .option('-p, --period <period>', 'Period in YYYY-MM format')
+  .action(wrap('firma add monthly', (opts: { period?: string }) => addMonthlyCommand({ period: opts.period })));
+
+// ── show (read-only, --json supported) ─────────────────
+const show = program.command('show').description('Show data (use --json for scripting)');
+
+show
+  .command('portfolio')
+  .alias('p')
+  .description('Holdings overview with P&L')
+  .option('--json', 'Output as JSON')
+  .action(wrapMaybeJson('firma show portfolio',
+    (opts: { json?: boolean }) => showPortfolioCommand({ json: opts.json ?? false }),
+    (opts) => opts.json ?? false));
+
+show
+  .command('txns [ticker]')
+  .alias('t')
+  .description('Transaction history (optionally filtered by ticker)')
+  .option('--json', 'Output as JSON')
+  .action(wrapMaybeJson('firma show txns',
+    (ticker: string | undefined, opts: { json?: boolean }) => showTxnsCommand(ticker, { json: opts.json ?? false }),
+    (_t, opts) => opts.json ?? false));
+
+show
+  .command('balance')
+  .description('Show stored balance entries for a period')
+  .option('-p, --period <period>', 'Period in YYYY-MM format')
+  .option('--json', 'Output as JSON')
+  .action(wrapMaybeJson('firma show balance',
+    (opts: { period?: string; json?: boolean }) => showBalanceCommand({ json: opts.json ?? false, period: opts.period }),
+    (opts) => opts.json ?? false));
+
+show
+  .command('flow')
+  .description('Show stored flow entries for a period')
+  .option('-p, --period <period>', 'Period in YYYY-MM format')
+  .option('--json', 'Output as JSON')
+  .action(wrapMaybeJson('firma show flow',
+    (opts: { period?: string; json?: boolean }) => showFlowCommand({ json: opts.json ?? false, period: opts.period }),
+    (opts) => opts.json ?? false));
+
+show
+  .command('news <ticker>')
+  .description('Latest company news from Finnhub')
+  .option('--days <n>',  'Days to look back (default: 7)', '7')
+  .option('--limit <n>', 'Max articles to show (default: 10)', '10')
+  .option('--json',      'Output as JSON')
+  .action(wrapMaybeJson('firma show news',
+    (ticker: string, opts: { days: string; limit: string; json?: boolean }) =>
+      showNewsCommand(ticker, { json: opts.json ?? false, days: Number(opts.days), limit: Number(opts.limit) }),
+    (_t, opts) => opts.json ?? false));
+
+show
+  .command('insider <ticker>')
+  .description('Insider buy/sell transactions from Finnhub')
+  .option('--limit <n>', 'Max transactions to show (default: 20)', '20')
+  .option('--json',      'Output as JSON')
+  .action(wrapMaybeJson('firma show insider',
+    (ticker: string, opts: { limit: string; json?: boolean }) =>
+      showInsiderCommand(ticker, { json: opts.json ?? false, limit: Number(opts.limit) }),
+    (_t, opts) => opts.json ?? false));
+
+show
+  .command('financials <ticker>')
+  .description('SEC-reported financials (income, cash flow, balance sheet)')
+  .option('--annual',    'Show annual periods instead of quarterly')
+  .option('--limit <n>', 'Number of periods to show (default: 4)', '4')
+  .option('--json',      'Output as JSON')
+  .action(wrapMaybeJson('firma show financials',
+    (ticker: string, opts: { annual?: boolean; limit: string; json?: boolean }) =>
+      showFinancialsCommand(ticker, { json: opts.json ?? false, annual: opts.annual ?? false, limit: Number(opts.limit) }),
+    (_t, opts) => opts.json ?? false));
+
+show
+  .command('earnings [ticker]')
+  .description('Earnings calendar — upcoming (all holdings) or history+upcoming (single ticker)')
+  .option('--weeks <n>', 'Look-ahead window in weeks (default: 4)', '4')
+  .option('--json',      'Output as JSON')
+  .action(wrapMaybeJson('firma show earnings',
+    (ticker: string | undefined, opts: { weeks: string; json?: boolean }) =>
+      showEarningsCommand(ticker, { json: opts.json ?? false, weeks: Number(opts.weeks) }),
+    (_t, opts) => opts.json ?? false));
+
+// ── report (aggregated views, --json supported) ────────
+program
+  .command('report [target]')
+  .alias('r')
+  .description('Aggregated reports: balance, flow, settle, or omit for combined')
+  .option('-c, --currency <currency>', 'Display currency: KRW, USD, EUR, JPY, CNY, GBP', 'KRW')
+  .option('-p, --period <period>',     'Period in YYYY-MM (used by `report settle`)')
+  .option('--json',                    'Output raw data as JSON')
+  .action(wrapMaybeJson('firma report',
+    (target: string | undefined, opts: { currency: string; period?: string; json?: boolean }) =>
+      reportCommand(target, opts.currency.toUpperCase() as Currency, { json: opts.json ?? false, period: opts.period }),
+    (_t, opts) => opts.json ?? false));
+
+// ── txn mutations (top-level, single-noun) ─────────────
+program
+  .command('edit [id]')
+  .description('Edit a transaction (interactive picker if id omitted)')
+  .action(wrap('firma edit', editTxnCommand));
+
+program
+  .command('delete [id]')
+  .alias('rm')
+  .description('Delete a transaction (interactive picker if id omitted)')
+  .action(wrap('firma delete', deleteTxnCommand));
+
+// ── actions ────────────────────────────────────────────
+program
+  .command('sync')
+  .description('Sync latest stock prices from Finnhub')
+  .option('--json', 'Output result as JSON')
+  .action(wrapMaybeJson('firma sync',
+    (opts: { json?: boolean }) => syncCommand({ json: opts.json ?? false }),
+    (opts) => opts.json ?? false));
+
+// ── auth ───────────────────────────────────────────────
 const auth = program.command('auth').description('Manage authentication');
+auth.command('login').description('Log in to your Firma account')
+  .action(wrap('firma auth login', loginCommand));
+auth.command('whoami').description('Show currently logged-in account')
+  .action(wrap('firma auth whoami', whoamiCommand));
+auth.command('logout').description('Log out and clear saved credentials')
+  .action(wrap('firma auth logout', logoutCommand));
 
-auth
-  .command('login')
-  .description('Log in to your Firma account')
-  .action(async () => {
-    intro(pc.bgCyan(pc.black(' firma auth login ')));
-    await loginCommand();
-    outro('Done');
-  });
-
-auth
-  .command('whoami')
-  .description('Show currently logged-in account')
-  .action(() => {
-    intro(pc.bgCyan(pc.black(' firma auth whoami ')));
-    whoamiCommand();
-    outro('Done');
-  });
-
-auth
-  .command('logout')
-  .description('Log out and clear saved credentials')
-  .action(() => {
-    intro(pc.bgCyan(pc.black(' firma auth logout ')));
-    logoutCommand();
-    outro('Done');
-  });
-
+// ── config ─────────────────────────────────────────────
 const config = program.command('config').description('Manage local configuration');
 
 config
@@ -124,166 +268,9 @@ config
     }
   });
 
-program
-  .command('sync')
-  .description('Sync latest stock prices from Finnhub')
-  .option('--json', 'Output result as JSON')
-  .action(async (opts: { json?: boolean }) => {
-    if (!opts.json) intro(pc.bgCyan(pc.black(' firma sync ')));
-    await syncCommand({ json: opts.json ?? false });
-    if (!opts.json) outro('Done');
-  });
-
-program
-  .command('portfolio')
-  .alias('p')
-  .description('Show portfolio overview')
-  .option('--json', 'Output as JSON')
-  .action(async (opts: { json?: boolean }) => {
-    if (!opts.json) intro(pc.bgCyan(pc.black(' firma portfolio ')));
-    await portfolioCommand({ json: opts.json ?? false });
-    if (!opts.json) outro('Done');
-  });
-
-program
-  .command('add')
-  .description('Add a stock transaction')
-  .action(async () => {
-    intro(pc.bgCyan(pc.black(' firma add ')));
-    await addCommand();
-    outro('Done');
-  });
-
-program
-  .command('edit [id]')
-  .description('Edit a transaction (interactive picker if id omitted)')
-  .action(async (id?: string) => {
-    intro(pc.bgCyan(pc.black(' firma edit ')));
-    await editCommand(id);
-    outro('Done');
-  });
-
-program
-  .command('delete [id]')
-  .alias('rm')
-  .description('Delete a transaction (interactive picker if id omitted)')
-  .action(async (id?: string) => {
-    intro(pc.bgCyan(pc.black(' firma delete ')));
-    await deleteCommand(id);
-    outro('Done');
-  });
-
-program
-  .command('flow')
-  .description('Record monthly income & expenses')
-  .option('--json', 'Output stored data as JSON (read-only)')
-  .option('-p, --period <period>', 'Period in YYYY-MM format')
-  .action(async (opts: { json?: boolean; period?: string }) => {
-    if (!opts.json) intro(pc.bgCyan(pc.black(' firma flow ')));
-    await flowCommand({ json: opts.json ?? false, period: opts.period });
-    if (!opts.json) outro('Done');
-  });
-
-program
-  .command('balance')
-  .description('Record monthly asset & liability snapshot')
-  .option('--json', 'Output stored data as JSON (read-only)')
-  .option('-p, --period <period>', 'Period in YYYY-MM format')
-  .action(async (opts: { json?: boolean; period?: string }) => {
-    if (!opts.json) intro(pc.bgCyan(pc.black(' firma balance ')));
-    await balanceCommand({ json: opts.json ?? false, period: opts.period });
-    if (!opts.json) outro('Done');
-  });
-
-program
-  .command('settle')
-  .description('Month-end settlement: balance sheet + cash flow')
-  .option('--json', 'Output stored data as JSON (read-only)')
-  .option('-p, --period <period>', 'Period in YYYY-MM format')
-  .action(async (opts: { json?: boolean; period?: string }) => {
-    if (!opts.json) intro(pc.bgCyan(pc.black(' firma settle ')));
-    await settleCommand({ json: opts.json ?? false, period: opts.period });
-    if (!opts.json) outro('Done');
-  });
-
-program
-  .command('report [target]')
-  .alias('r')
-  .description('Show reports: balance, flow, or combined (default)')
-  .option('-c, --currency <currency>', 'Display currency: KRW, USD, EUR, JPY, CNY, GBP', 'KRW')
-  .option('--json', 'Output raw data as JSON')
-  .action(async (target: string | undefined, opts: { currency: string; json?: boolean }) => {
-    if (!opts.json) intro(pc.bgCyan(pc.black(' firma report ')));
-    await reportCommand(target, opts.currency.toUpperCase() as Currency, { json: opts.json ?? false });
-    if (!opts.json) outro('Done');
-  });
-
-program
-  .command('txns [ticker]')
-  .alias('t')
-  .description('List transactions, optionally filtered by ticker')
-  .option('--json', 'Output as JSON')
-  .action(async (ticker: string | undefined, opts: { json?: boolean }) => {
-    if (!opts.json) intro(pc.bgCyan(pc.black(' firma txns ')));
-    await txnsCommand(ticker, { json: opts.json ?? false });
-    if (!opts.json) outro('Done');
-  });
-
-program
-  .command('news <ticker>')
-  .description('Latest company news from Finnhub')
-  .option('--days <n>',  'Days to look back (default: 7)', '7')
-  .option('--limit <n>', 'Max articles to show (default: 10)', '10')
-  .option('--json',      'Output as JSON')
-  .action(async (ticker: string, opts: { days: string; limit: string; json?: boolean }) => {
-    if (!opts.json) intro(pc.bgCyan(pc.black(' firma news ')));
-    await newsCommand(ticker, { json: opts.json ?? false, days: Number(opts.days), limit: Number(opts.limit) });
-    if (!opts.json) outro('Done');
-  });
-
-program
-  .command('insider <ticker>')
-  .description('Insider buy/sell transactions from Finnhub')
-  .option('--limit <n>', 'Max transactions to show (default: 20)', '20')
-  .option('--json',      'Output as JSON')
-  .action(async (ticker: string, opts: { limit: string; json?: boolean }) => {
-    if (!opts.json) intro(pc.bgCyan(pc.black(' firma insider ')));
-    await insiderCommand(ticker, { json: opts.json ?? false, limit: Number(opts.limit) });
-    if (!opts.json) outro('Done');
-  });
-
-program
-  .command('financials <ticker>')
-  .description('SEC-reported financials (income, cash flow, balance sheet)')
-  .option('--annual',    'Show annual periods instead of quarterly')
-  .option('--limit <n>', 'Number of periods to show (default: 4)', '4')
-  .option('--json',      'Output as JSON')
-  .action(async (ticker: string, opts: { annual?: boolean; limit: string; json?: boolean }) => {
-    if (!opts.json) intro(pc.bgCyan(pc.black(' firma financials ')));
-    await financialsCommand(ticker, { json: opts.json ?? false, annual: opts.annual ?? false, limit: Number(opts.limit) });
-    if (!opts.json) outro('Done');
-  });
-
-program
-  .command('earnings [ticker]')
-  .description('Earnings calendar — upcoming (all holdings) or history+upcoming (single ticker)')
-  .option('--weeks <n>', 'Look-ahead window in weeks (default: 4)', '4')
-  .option('--json',      'Output as JSON')
-  .action(async (ticker: string | undefined, opts: { weeks: string; json?: boolean }) => {
-    if (!opts.json) intro(pc.bgCyan(pc.black(' firma earnings ')));
-    await earningsCommand(ticker, { json: opts.json ?? false, weeks: Number(opts.weeks) });
-    if (!opts.json) outro('Done');
-  });
-
+// ── mcp ────────────────────────────────────────────────
 const mcp = program.command('mcp').description('Manage MCP server integration');
-
-mcp
-  .command('install')
-  .description('Register firma MCP server in Claude Desktop config')
-  .action(() => {
-    intro(pc.bgCyan(pc.black(' firma mcp install ')));
-    mcpInstallCommand();
-    outro('Done');
-  });
+mcp.command('install').description('Register firma MCP server in Claude Desktop config')
+  .action(wrap('firma mcp install', mcpInstallCommand));
 
 program.parse();

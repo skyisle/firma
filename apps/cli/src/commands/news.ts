@@ -13,7 +13,7 @@ const relativeTime = (unixSec: number) => {
   return `${diffD}d ago`;
 };
 
-export const newsCommand = async (
+export const showNewsCommand = async (
   ticker: string,
   { json = false, days = 7, limit = 10 } = {},
 ) => {

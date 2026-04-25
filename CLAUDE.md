@@ -23,7 +23,7 @@ packages/
 
 - CLI: `apps/cli/src/commands/<name>.ts` + `apps/cli/src/index.ts` 등록
 - MCP: `apps/mcp/src/index.ts` 에 `server.tool()` 추가
-- MCP 툴 이름 컨벤션: `get_*` (조회), `add_*` / `set_*` (쓰기)
+- MCP 툴 이름 컨벤션: `add_*` (입력), `show_*` (단순 조회), `report_*` (집계). 변경/삭제는 `edit_*` / `delete_*`.
 - 빌드 순서: `@firma/finnhub` → `@firma/mcp` → `firma-app`
 
 ## Key Design Decisions
@@ -34,24 +34,56 @@ packages/
 
 ## CLI Commands
 
+Three verb groups: `add` (input), `show` (read), `report` (aggregated).
+
 ```
-firma auth login          # Google OAuth → saves token to ~/.firma/config.json
-firma auth whoami         # Show logged-in account
-firma add                 # Interactive: add buy/sell/deposit/dividend/tax transaction
-firma edit [id]           # Edit a transaction (interactive picker if id omitted)
-firma delete [id]         # Delete a transaction (alias: rm)
-firma sync                # Fetch latest prices from Finnhub
-firma portfolio           # Holdings table with P&L
-firma flow                # Monthly income/expense tracking
-firma balance             # Monthly asset/liability snapshot
-firma settle              # Month-end settlement report
-firma report              # Combined balance + cash flow report
-firma txns [ticker]       # Transaction history
-firma news <ticker>       # Recent company news (Finnhub)
-firma insider <ticker>    # Insider buy/sell transactions (Finnhub)
-firma financials <ticker> # SEC-reported financials (Finnhub)
-firma earnings [ticker]   # Earnings calendar (Finnhub)
-firma mcp install         # Register MCP server in Claude Desktop
+# auth & config
+firma auth login / whoami / logout
+firma config set finnhub-key <key>
+firma config get [key]
+
+# add — interactive entry
+firma add txn                 # buy/sell/deposit/dividend/tax
+firma add balance [-p YYYY-MM]
+firma add flow    [-p YYYY-MM]
+firma add monthly [-p YYYY-MM]   # balance + flow in one flow
+
+# show — read-only, supports --json
+firma show portfolio
+firma show txns [ticker]
+firma show balance [-p YYYY-MM]
+firma show flow    [-p YYYY-MM]
+firma show news <ticker>
+firma show insider <ticker>
+firma show financials <ticker>
+firma show earnings [ticker]
+
+# report — aggregated, supports --json
+firma report                       # combined balance + flow trends
+firma report balance
+firma report flow
+firma report settle [-p YYYY-MM]   # single-period summary
+
+# transaction mutations (single-noun)
+firma edit [id]
+firma delete [id]                  # alias: rm
+
+# actions
+firma sync
+firma mcp install
+```
+
+## MCP Tools
+
+Same pattern: `add_*` / `show_*` / `report_*` (+ `edit_txn`, `delete_txn`, `sync_prices`).
+
+```
+add_txn / edit_txn / delete_txn
+add_balance / add_flow
+show_portfolio / show_txns / show_balance / show_flow / show_prices
+show_news / show_insider / show_financials / show_earnings
+report_settle
+sync_prices
 ```
 
 ## Dev

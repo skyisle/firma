@@ -30,7 +30,7 @@ const err = (msg: string) => ({
 
 
 server.tool(
-  'get_portfolio',
+  'show_portfolio',
   'Get current stock holdings with average cost and cached prices',
   {},
   async () => {
@@ -59,7 +59,7 @@ server.tool(
 );
 
 server.tool(
-  'get_transactions',
+  'show_txns',
   'List transactions, optionally filtered by ticker symbol',
   { ticker: z.string().optional().describe('Filter by ticker (e.g. AAPL)') },
   async ({ ticker }) => {
@@ -72,7 +72,7 @@ server.tool(
 );
 
 server.tool(
-  'get_balance',
+  'show_balance',
   'Get balance sheet entries (assets and liabilities). Optionally filter by period (YYYY-MM)',
   { period: z.string().optional().describe('Period filter e.g. "2025-03"') },
   async ({ period }) => {
@@ -85,7 +85,7 @@ server.tool(
 );
 
 server.tool(
-  'get_flow',
+  'show_flow',
   'Get cash flow entries (income and expenses). Optionally filter by period (YYYY-MM)',
   { period: z.string().optional().describe('Period filter e.g. "2025-03"') },
   async ({ period }) => {
@@ -98,8 +98,8 @@ server.tool(
 );
 
 server.tool(
-  'get_period_summary',
-  'Read-only summary for a period: balance sheet + cash flow entries with computed totals (net_worth, net_flow). Use this to review month-end settlement results after entries are recorded via set_balance_entry / set_flow_entry. Defaults to the current month.',
+  'report_settle',
+  'Read-only summary for a period: balance sheet + cash flow entries with computed totals (net_worth, net_flow). Use this to review month-end settlement results after entries are recorded via add_balance / add_flow. Defaults to the current month.',
   { period: z.string().optional().describe('Period in YYYY-MM format (defaults to current month)') },
   async ({ period }) => {
     const db = getDb();
@@ -133,7 +133,7 @@ server.tool(
 );
 
 server.tool(
-  'get_prices',
+  'show_prices',
   'Get cached stock prices for all synced tickers',
   {},
   async () => {
@@ -144,7 +144,7 @@ server.tool(
 
 
 server.tool(
-  'add_transaction',
+  'add_txn',
   'Record a stock transaction (buy, sell, deposit, dividend, tax)',
   {
     ticker:   z.string().describe('Stock ticker symbol (e.g. AAPL)'),
@@ -165,7 +165,7 @@ server.tool(
 );
 
 server.tool(
-  'update_transaction',
+  'edit_txn',
   'Update fields of an existing transaction by id. Only provided fields are changed.',
   {
     id:     z.number().int().positive(),
@@ -191,7 +191,7 @@ server.tool(
 );
 
 server.tool(
-  'delete_transaction',
+  'delete_txn',
   'Delete a transaction by id',
   { id: z.number().int().positive() },
   async ({ id }) => {
@@ -203,7 +203,7 @@ server.tool(
 );
 
 server.tool(
-  'set_balance_entry',
+  'add_balance',
   'Upsert a balance sheet entry for a period. sub_type: cash|investment|other (assets) or short_term|long_term (liabilities)',
   {
     period:   z.string().describe('YYYY-MM'),
@@ -226,7 +226,7 @@ server.tool(
 );
 
 server.tool(
-  'set_flow_entry',
+  'add_flow',
   'Upsert a cash flow entry for a period. sub_type for income: salary|business|dividends|interest|income_other. For expense: personal|insurance|phone|utilities|rent|maintenance|loan_repayment|expense_other',
   {
     period:   z.string().describe('YYYY-MM'),
@@ -289,7 +289,7 @@ server.tool(
 
 
 server.tool(
-  'get_news',
+  'show_news',
   'Fetch recent company news for a ticker from Finnhub',
   {
     ticker: z.string().describe('Stock ticker symbol (e.g. AAPL)'),
@@ -313,7 +313,7 @@ server.tool(
 );
 
 server.tool(
-  'get_insider_transactions',
+  'show_insider',
   'Fetch recent insider buy/sell transactions for a ticker from Finnhub. transactionCode: P=buy, S=sell, A=award, G=gift, M=exercise',
   {
     ticker: z.string().describe('Stock ticker symbol (e.g. AAPL)'),
@@ -380,7 +380,7 @@ const extractFinancialPeriod = (p: FinancialPeriod) => {
 };
 
 server.tool(
-  'get_financials',
+  'show_financials',
   'Fetch SEC-reported financials for a ticker. Returns key income statement, cash flow, and balance sheet metrics extracted from XBRL filings.',
   {
     ticker: z.string().describe('Stock ticker symbol (e.g. AAPL)'),
@@ -402,7 +402,7 @@ server.tool(
 );
 
 server.tool(
-  'get_earnings',
+  'show_earnings',
   'Fetch earnings calendar. Without a ticker, returns upcoming earnings for all held tickers. With a ticker, returns history + upcoming.',
   {
     ticker:  z.string().optional().describe('Ticker symbol. Omit to get upcoming earnings for all holdings.'),

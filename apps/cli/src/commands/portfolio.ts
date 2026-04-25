@@ -12,7 +12,7 @@ const fmt = {
 const colorPnl = (n: number, text: string) => n >= 0 ? pc.green(text) : pc.red(text);
 const COL = { TICKER: 8, SHARES: 8, AVG: 12, PRICE: 12, PNL: 22 };
 
-export const portfolioCommand = async ({ json = false } = {}) => {
+export const showPortfolioCommand = async ({ json = false } = {}) => {
   const repo = getRepository();
   const holdings = aggregateHoldings(repo.transactions.getAll());
 

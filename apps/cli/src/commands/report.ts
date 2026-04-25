@@ -2,6 +2,7 @@ import { log, note } from '@clack/prompts';
 import pc from 'picocolors';
 import { getRepository } from '../db/index.ts';
 import { fetchFxRates } from '../services/fx.ts';
+import { currentPeriod } from './ledger-input.ts';
 import type { BalanceEntry, FlowEntry } from '@firma/db';
 
 type BalancePeriod = { period: string; assets: number; liabilities: number; netWorth: number };
@@ -216,12 +217,62 @@ const renderFlowBreakdown = (entries: FlowEntry[], year: string, fmt: (v: number
   ].join('\n');
 };
 
-export const reportCommand = async (target?: string, currency: Currency = 'KRW', { json = false } = {}) => {
+const reportSettle = async (period: string | undefined, json: boolean) => {
+  const repo = getRepository();
+  const targetPeriod = period ?? currentPeriod();
+
+  const balEntries = repo.balance.getByPeriod(targetPeriod);
+  const flowEnts   = repo.flow.getByPeriod(targetPeriod);
+
+  const total_assets      = balEntries.filter(e => e.type === 'asset').reduce((s, e) => s + e.amount, 0);
+  const total_liabilities = balEntries.filter(e => e.type === 'liability').reduce((s, e) => s + e.amount, 0);
+  const total_income      = flowEnts.filter(e => e.type === 'income').reduce((s, e) => s + e.amount, 0);
+  const total_expenses    = flowEnts.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0);
+  const net_worth         = total_assets - total_liabilities;
+  const net_flow          = total_income - total_expenses;
+
+  if (json) {
+    process.stdout.write(JSON.stringify({
+      period: targetPeriod,
+      balance: { entries: balEntries, total_assets, total_liabilities, net_worth },
+      flow:    { entries: flowEnts,   total_income, total_expenses, net_flow },
+    }, null, 2) + '\n');
+    return;
+  }
+
+  if (balEntries.length === 0 && flowEnts.length === 0) {
+    log.warn(`No data for ${targetPeriod}. Run \`firma add monthly\`.`);
+    return;
+  }
+
+  const colorFlow = net_flow >= 0 ? pc.green : pc.red;
+  const body = [
+    pc.bold('BALANCE SHEET'),
+    `  ${'Assets'.padEnd(16)}${total_assets.toLocaleString('en-US').padStart(16)} KRW`,
+    `  ${'Liabilities'.padEnd(16)}${total_liabilities.toLocaleString('en-US').padStart(16)} KRW`,
+    `  ${pc.bold('Net Worth'.padEnd(16))}${pc.bold(net_worth.toLocaleString('en-US').padStart(16))} KRW`,
+    '',
+    pc.bold('CASH FLOW'),
+    `  ${'Income'.padEnd(16)}${total_income.toLocaleString('en-US').padStart(16)} KRW`,
+    `  ${'Expenses'.padEnd(16)}${total_expenses.toLocaleString('en-US').padStart(16)} KRW`,
+    `  ${pc.bold('Net Flow'.padEnd(16))}${colorFlow(pc.bold(net_flow.toLocaleString('en-US').padStart(16)))} KRW`,
+  ].join('\n');
+
+  note(body, `Settlement Summary  ${targetPeriod}`);
+};
+
+export const reportCommand = async (
+  target?: string,
+  currency: Currency = 'KRW',
+  { json = false, period }: { json?: boolean; period?: string } = {},
+) => {
+  if (target === 'settle') return reportSettle(period, json);
+
   const showBalance = !target || target === 'balance';
   const showFlow    = !target || target === 'flow';
 
   if (target && target !== 'balance' && target !== 'flow') {
-    log.error(`Unknown target "${target}". Use: balance, flow, or omit for combined.`);
+    log.error(`Unknown target "${target}". Use: balance, flow, settle, or omit for combined.`);
     return;
   }
 

@@ -68,7 +68,7 @@ const promptField = async (txn: Transaction): Promise<Partial<NewTransaction> | 
   return null;
 };
 
-export const editCommand = async (idArg?: string) => {
+export const editTxnCommand = async (idArg?: string) => {
   const repo = getRepository();
 
   let id: number;

@@ -36,26 +36,9 @@ const getOverseasStockKRW = async (): Promise<number> => {
   return Math.round(totalUSD * Number(rateInput));
 };
 
-export const balanceCommand = async ({ json = false, period }: { json?: boolean; period?: string } = {}) => {
+export const addBalanceCommand = async ({ period }: { period?: string } = {}) => {
   const repo = getRepository();
   const targetPeriod = period ?? currentPeriod();
-
-  if (json) {
-    const entries = repo.balance.getByPeriod(targetPeriod);
-    const assets = entries.filter(e => e.type === 'asset');
-    const liabilities = entries.filter(e => e.type === 'liability');
-    const total_assets = assets.reduce((s, e) => s + e.amount, 0);
-    const total_liabilities = liabilities.reduce((s, e) => s + e.amount, 0);
-    process.stdout.write(JSON.stringify({
-      period: targetPeriod,
-      entries,
-      total_assets,
-      total_liabilities,
-      net_worth: total_assets - total_liabilities,
-    }, null, 2) + '\n');
-    return;
-  }
-
   const date = periodEndDate(targetPeriod);
 
   log.message(pc.dim(`  Period: ${targetPeriod}  (${date})\n`));
@@ -92,4 +75,46 @@ export const balanceCommand = async ({ json = false, period }: { json?: boolean;
   ].join('\n');
 
   note(summary, `Balance Sheet  ${targetPeriod}`);
+};
+
+export const showBalanceCommand = async ({ json = false, period }: { json?: boolean; period?: string } = {}) => {
+  const repo = getRepository();
+  const targetPeriod = period ?? currentPeriod();
+  const entries = repo.balance.getByPeriod(targetPeriod);
+
+  const assets            = entries.filter(e => e.type === 'asset');
+  const liabilities       = entries.filter(e => e.type === 'liability');
+  const total_assets      = assets.reduce((s, e) => s + e.amount, 0);
+  const total_liabilities = liabilities.reduce((s, e) => s + e.amount, 0);
+  const net_worth         = total_assets - total_liabilities;
+
+  if (json) {
+    process.stdout.write(JSON.stringify({
+      period: targetPeriod, entries, total_assets, total_liabilities, net_worth,
+    }, null, 2) + '\n');
+    return;
+  }
+
+  if (entries.length === 0) {
+    log.warn(`No balance entries for ${targetPeriod}. Run \`firma add balance\`.`);
+    return;
+  }
+
+  const renderRows = (group: typeof entries) =>
+    group.length === 0 ? [pc.dim('  (none)')]
+      : group.map(e => `  ${pc.dim(e.category.padEnd(20))}${e.amount.toLocaleString('en-US').padStart(14)} KRW`);
+
+  const body = [
+    pc.bold('ASSETS'),
+    ...renderRows(assets),
+    '',
+    pc.bold('LIABILITIES'),
+    ...renderRows(liabilities),
+    pc.dim('─'.repeat(40)),
+    `${'Assets'.padEnd(20)}${total_assets.toLocaleString('en-US').padStart(14)} KRW`,
+    `${'Liabilities'.padEnd(20)}${total_liabilities.toLocaleString('en-US').padStart(14)} KRW`,
+    `${pc.bold('Net Worth'.padEnd(20))}${pc.bold(net_worth.toLocaleString('en-US').padStart(14))} KRW`,
+  ].join('\n');
+
+  note(body, `Balance Sheet  ${targetPeriod}`);
 };

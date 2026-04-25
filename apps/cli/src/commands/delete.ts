@@ -16,7 +16,7 @@ const fmtTxn = (t: Transaction) => {
   return `${pc.dim(t.date)}  ${pc.bold(t.ticker.padEnd(6))} ${t.type.padEnd(9)} ${detail}`;
 };
 
-export const deleteCommand = async (idArg?: string) => {
+export const deleteTxnCommand = async (idArg?: string) => {
   const repo = getRepository();
 
   if (idArg) {

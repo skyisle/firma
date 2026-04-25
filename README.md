@@ -44,7 +44,7 @@ firma mcp install
 # Restart Claude Desktop — that's it.
 
 # 4. Add your first trade and sync prices
-firma add
+firma add txn
 firma sync
 ```
 
@@ -65,43 +65,50 @@ Your numbers never leave your machine.
 
 ## MCP tools
 
-Available in Claude Desktop after `firma mcp install`:
+Available in Claude Desktop after `firma mcp install`. Same `add_*` / `show_*` / `report_*` shape as the CLI.
 
 | Tool | Description |
 |---|---|
-| `get_portfolio` | Holdings with P&L and avg cost |
-| `get_transactions` | Transaction history (filterable by ticker) |
-| `get_balance` | Monthly asset & liability data |
-| `get_flow` | Monthly income & expense data |
-| `get_prices` | Cached price data |
-| `add_transaction` | Record a buy or sell |
-| `set_balance_entry` | Add or update an asset/liability entry |
-| `set_flow_entry` | Add or update an income/expense entry |
+| `add_txn` | Record a buy / sell / deposit / dividend / tax |
+| `edit_txn` | Update fields of an existing transaction |
+| `delete_txn` | Delete a transaction by id |
+| `add_balance` | Add or update an asset/liability entry |
+| `add_flow` | Add or update an income/expense entry |
+| `show_portfolio` | Holdings with P&L and avg cost |
+| `show_txns` | Transaction history (filterable by ticker) |
+| `show_balance` | Stored balance entries (filterable by period) |
+| `show_flow` | Stored flow entries (filterable by period) |
+| `show_prices` | Cached price data |
+| `show_news` / `show_insider` / `show_financials` / `show_earnings` | Finnhub queries |
+| `report_settle` | Single-period summary with net_worth + net_flow |
 | `sync_prices` | Fetch latest prices from Finnhub |
 
 ---
 
 ## CLI reference
 
+Three verb groups: **add** (input), **show** (read), **report** (aggregated). All `show *` and `report *` commands accept `--json`.
+
 | Command | Description |
 |---|---|
-| `firma sync` | Fetch latest prices from Finnhub |
-| `firma portfolio` | Holdings overview with P&L |
-| `firma add` | Record a transaction (buy / sell / deposit / dividend / tax) |
+| `firma add txn` | Record a transaction (buy / sell / deposit / dividend / tax) |
+| `firma add balance [-p YYYY-MM]` | Monthly asset & liability snapshot |
+| `firma add flow [-p YYYY-MM]` | Monthly income & expense entry |
+| `firma add monthly [-p YYYY-MM]` | Balance + flow in one flow (month-end entry) |
+| `firma show portfolio` | Holdings overview with P&L |
+| `firma show txns [ticker]` | Transaction history with running avg cost |
+| `firma show balance / flow [-p YYYY-MM]` | Stored entries for a period |
+| `firma show news / insider / financials / earnings <ticker>` | Finnhub data |
+| `firma report` | Net worth trend + cash flow charts (combined) |
+| `firma report balance / flow / settle` | Targeted views |
+| `firma report -c USD` | Display in USD, EUR, JPY, CNY, or GBP |
 | `firma edit [id]` | Edit a transaction |
 | `firma delete [id]` | Delete a transaction (alias `rm`) |
-| `firma txns [ticker]` | Transaction history with running avg cost |
-| `firma balance` | Monthly asset & liability snapshot |
-| `firma flow` | Monthly income & expense entry |
-| `firma settle` | Run balance + flow in one step |
-| `firma report` | Net worth trend and cash flow charts |
-| `firma report -c USD` | Report in USD, EUR, JPY, CNY, or GBP |
+| `firma sync` | Fetch latest prices from Finnhub |
 | `firma mcp install` | Register MCP server in Claude Desktop |
 | `firma auth login` | Sign in with Google |
 | `firma config set finnhub-key KEY` | Set Finnhub API key |
 | `firma config set db-path PATH` | Use a custom database location |
-
-All read commands support `--json` for scripting and AI pipelines.
 
 ---
 

@@ -24,7 +24,7 @@ const fmtValue = (change: number, price: number) => {
   return `$${v.toFixed(0)}`;
 };
 
-export const insiderCommand = async (
+export const showInsiderCommand = async (
   ticker: string,
   { json = false, limit = 20 } = {},
 ) => {

@@ -71,7 +71,7 @@ const renderTable = (items: EarningsItem[], title: string) => {
   note(`${header}\n${divider}\n${rows.join('\n')}`, title);
 };
 
-export const earningsCommand = async (
+export const showEarningsCommand = async (
   ticker: string | undefined,
   { json = false, weeks = 4 } = {},
 ) => {
