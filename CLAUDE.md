@@ -64,9 +64,14 @@ firma report balance
 firma report flow
 firma report settle [-p YYYY-MM]   # single-period summary
 
-# transaction mutations (single-noun)
-firma edit [id]
-firma delete [id]                  # alias: rm
+# mutations
+firma edit txn [id]
+firma edit balance [period]        # picker if period omitted; pre-fills existing values
+firma edit flow [period]
+firma delete txn [id]
+firma delete balance [period]      # deletes all entries for the period
+firma delete flow [period]
+# alias: `firma rm ...` for delete
 
 # actions
 firma sync
@@ -79,7 +84,8 @@ Same pattern: `add_*` / `show_*` / `report_*` (+ `edit_txn`, `delete_txn`, `sync
 
 ```
 add_txn / edit_txn / delete_txn
-add_balance / add_flow
+add_balance / add_flow              # upsert: also acts as edit for same composite key
+delete_balance / delete_flow        # period-level (or single entry by composite key)
 show_portfolio / show_txns / show_balance / show_flow / show_prices
 show_news / show_insider / show_financials / show_earnings
 report_settle

@@ -5,8 +5,8 @@ import pc from 'picocolors';
 
 import { syncCommand } from './commands/sync.ts';
 import { addTxnCommand } from './commands/add.ts';
-import { editTxnCommand } from './commands/edit.ts';
-import { deleteTxnCommand } from './commands/delete.ts';
+import { editTxnCommand, editBalanceCommand, editFlowCommand } from './commands/edit.ts';
+import { deleteTxnCommand, deleteBalanceCommand, deleteFlowCommand } from './commands/delete.ts';
 import { addBalanceCommand, showBalanceCommand } from './commands/balance.ts';
 import { addFlowCommand, showFlowCommand } from './commands/flow.ts';
 import { addMonthlyCommand } from './commands/monthly.ts';
@@ -202,17 +202,41 @@ program
       reportCommand(target, opts.currency.toUpperCase() as Currency, { json: opts.json ?? false, period: opts.period }),
     (_t, opts) => opts.json ?? false));
 
-// ── txn mutations (top-level, single-noun) ─────────────
-program
-  .command('edit [id]')
-  .description('Edit a transaction (interactive picker if id omitted)')
-  .action(wrap('firma edit', editTxnCommand));
+// ── edit ───────────────────────────────────────────────
+const edit = program.command('edit').description('Edit an existing entry');
 
-program
-  .command('delete [id]')
-  .alias('rm')
+edit
+  .command('txn [id]')
+  .description('Edit a transaction (interactive picker if id omitted)')
+  .action(wrap('firma edit txn', editTxnCommand));
+
+edit
+  .command('balance [period]')
+  .description('Edit a monthly balance snapshot (re-runs add wizard with existing values pre-filled)')
+  .action(wrap('firma edit balance', editBalanceCommand));
+
+edit
+  .command('flow [period]')
+  .description('Edit a monthly flow entry (re-runs add wizard with existing values pre-filled)')
+  .action(wrap('firma edit flow', editFlowCommand));
+
+// ── delete ─────────────────────────────────────────────
+const del = program.command('delete').alias('rm').description('Delete an existing entry');
+
+del
+  .command('txn [id]')
   .description('Delete a transaction (interactive picker if id omitted)')
-  .action(wrap('firma delete', deleteTxnCommand));
+  .action(wrap('firma delete txn', deleteTxnCommand));
+
+del
+  .command('balance [period]')
+  .description('Delete all balance entries for a period')
+  .action(wrap('firma delete balance', deleteBalanceCommand));
+
+del
+  .command('flow [period]')
+  .description('Delete all flow entries for a period')
+  .action(wrap('firma delete flow', deleteFlowCommand));
 
 // ── actions ────────────────────────────────────────────
 program

@@ -2,7 +2,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, and } from 'drizzle-orm';
 import { createFinnhubClient } from '@firma/finnhub';
 import type { FinancialLineItem, FinancialPeriod } from '@firma/finnhub';
 import {
@@ -204,7 +204,7 @@ server.tool(
 
 server.tool(
   'add_balance',
-  'Upsert a balance sheet entry for a period. sub_type: cash|investment|other (assets) or short_term|long_term (liabilities)',
+  'Upsert a balance sheet entry for a period — also used to edit an existing entry (same composite key overwrites). sub_type: cash|investment|other (assets) or short_term|long_term (liabilities)',
   {
     period:   z.string().describe('YYYY-MM'),
     date:     z.string().describe('YYYY-MM-DD (typically month-end)'),
@@ -227,7 +227,7 @@ server.tool(
 
 server.tool(
   'add_flow',
-  'Upsert a cash flow entry for a period. sub_type for income: salary|business|dividends|interest|income_other. For expense: personal|insurance|phone|utilities|rent|maintenance|loan_repayment|expense_other',
+  'Upsert a cash flow entry for a period — also used to edit an existing entry (same composite key overwrites). sub_type for income: salary|business|dividends|interest|income_other. For expense: personal|insurance|phone|utilities|rent|maintenance|loan_repayment|expense_other',
   {
     period:   z.string().describe('YYYY-MM'),
     date:     z.string().describe('YYYY-MM-DD (typically month-end)'),
@@ -245,6 +245,66 @@ server.tool(
         set: { amount, date, memo: memo ?? null },
       }).run();
     return ok({ period, type, sub_type, category, amount });
+  },
+);
+
+server.tool(
+  'delete_balance',
+  'Delete balance entries for a period. If category is provided, only that single entry is removed; otherwise all entries for the period are deleted.',
+  {
+    period:   z.string().describe('YYYY-MM'),
+    type:     z.enum(['asset', 'liability']).optional().describe('Required when category is provided'),
+    sub_type: z.string().optional().describe('Required when category is provided'),
+    category: z.string().optional().describe('Specific category — if omitted, deletes all entries for the period'),
+  },
+  async ({ period, type, sub_type, category }) => {
+    const db = getDb();
+    if (category) {
+      if (!type || !sub_type) return err('type and sub_type are required when category is provided');
+      const res = db.delete(balanceEntries).where(
+        and(
+          eq(balanceEntries.period, period),
+          eq(balanceEntries.type, type),
+          eq(balanceEntries.sub_type, sub_type),
+          eq(balanceEntries.category, category),
+        ),
+      ).run();
+      if (res.changes === 0) return err(`No balance entry matched`);
+      return ok({ deleted: res.changes, period, category });
+    }
+    const res = db.delete(balanceEntries).where(eq(balanceEntries.period, period)).run();
+    if (res.changes === 0) return err(`No balance entries for ${period}`);
+    return ok({ deleted: res.changes, period });
+  },
+);
+
+server.tool(
+  'delete_flow',
+  'Delete flow entries for a period. If category is provided, only that single entry is removed; otherwise all entries for the period are deleted.',
+  {
+    period:   z.string().describe('YYYY-MM'),
+    type:     z.enum(['income', 'expense']).optional().describe('Required when category is provided'),
+    sub_type: z.string().optional().describe('Required when category is provided'),
+    category: z.string().optional().describe('Specific category — if omitted, deletes all entries for the period'),
+  },
+  async ({ period, type, sub_type, category }) => {
+    const db = getDb();
+    if (category) {
+      if (!type || !sub_type) return err('type and sub_type are required when category is provided');
+      const res = db.delete(flowEntries).where(
+        and(
+          eq(flowEntries.period, period),
+          eq(flowEntries.type, type),
+          eq(flowEntries.sub_type, sub_type),
+          eq(flowEntries.category, category),
+        ),
+      ).run();
+      if (res.changes === 0) return err(`No flow entry matched`);
+      return ok({ deleted: res.changes, period, category });
+    }
+    const res = db.delete(flowEntries).where(eq(flowEntries.period, period)).run();
+    if (res.changes === 0) return err(`No flow entries for ${period}`);
+    return ok({ deleted: res.changes, period });
   },
 );
 

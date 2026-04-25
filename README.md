@@ -72,8 +72,10 @@ Available in Claude Desktop after `firma mcp install`. Same `add_*` / `show_*` /
 | `add_txn` | Record a buy / sell / deposit / dividend / tax |
 | `edit_txn` | Update fields of an existing transaction |
 | `delete_txn` | Delete a transaction by id |
-| `add_balance` | Add or update an asset/liability entry |
-| `add_flow` | Add or update an income/expense entry |
+| `add_balance` | Add or update (upsert) an asset/liability entry — same composite key edits |
+| `add_flow` | Add or update (upsert) an income/expense entry |
+| `delete_balance` | Delete balance entries for a period (or a single composite key) |
+| `delete_flow` | Delete flow entries for a period (or a single composite key) |
 | `show_portfolio` | Holdings with P&L and avg cost |
 | `show_txns` | Transaction history (filterable by ticker) |
 | `show_balance` | Stored balance entries (filterable by period) |
@@ -102,8 +104,10 @@ Three verb groups: **add** (input), **show** (read), **report** (aggregated). Al
 | `firma report` | Net worth trend + cash flow charts (combined) |
 | `firma report balance / flow / settle` | Targeted views |
 | `firma report -c USD` | Display in USD, EUR, JPY, CNY, or GBP |
-| `firma edit [id]` | Edit a transaction |
-| `firma delete [id]` | Delete a transaction (alias `rm`) |
+| `firma edit txn [id]` | Edit a transaction |
+| `firma edit balance / flow [period]` | Edit a monthly snapshot (re-runs add wizard with existing values pre-filled) |
+| `firma delete txn [id]` | Delete a transaction |
+| `firma delete balance / flow [period]` | Delete all entries for a period (alias `rm`) |
 | `firma sync` | Fetch latest prices from Finnhub |
 | `firma mcp install` | Register MCP server in Claude Desktop |
 | `firma auth login` | Sign in with Google |

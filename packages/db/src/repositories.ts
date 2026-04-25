@@ -16,13 +16,17 @@ export interface PriceRepository {
 export interface BalanceRepository {
   getAll(): BalanceEntry[];
   getByPeriod(period: string): BalanceEntry[];
+  getPeriods(): string[];
   upsert(entry: NewBalanceEntry): void;
+  deleteByPeriod(period: string): number;
 }
 
 export interface FlowRepository {
   getAll(): FlowEntry[];
   getByPeriod(period: string): FlowEntry[];
+  getPeriods(): string[];
   upsert(entry: NewFlowEntry): void;
+  deleteByPeriod(period: string): number;
 }
 
 export interface DataRepository {

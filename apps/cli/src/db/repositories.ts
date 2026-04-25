@@ -1,4 +1,4 @@
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, desc } from 'drizzle-orm';
 import { transactions, balanceEntries, flowEntries, prices } from '@firma/db';
 import type {
   TransactionRepository, PriceRepository, BalanceRepository, FlowRepository, DataRepository,
@@ -39,22 +39,30 @@ export const createBalanceRepository = (db: Db): BalanceRepository => ({
   getAll: () => db.select().from(balanceEntries).all(),
   getByPeriod: (period: string) =>
     db.select().from(balanceEntries).where(eq(balanceEntries.period, period)).all(),
+  getPeriods: () =>
+    db.selectDistinct({ period: balanceEntries.period }).from(balanceEntries).orderBy(desc(balanceEntries.period)).all().map(r => r.period),
   upsert: (entry: NewBalanceEntry) =>
     db.insert(balanceEntries).values(entry).onConflictDoUpdate({
       target: [balanceEntries.period, balanceEntries.type, balanceEntries.sub_type, balanceEntries.category],
       set: { amount: entry.amount, date: entry.date, memo: entry.memo },
     }).run(),
+  deleteByPeriod: (period: string) =>
+    db.delete(balanceEntries).where(eq(balanceEntries.period, period)).run().changes,
 });
 
 export const createFlowRepository = (db: Db): FlowRepository => ({
   getAll: () => db.select().from(flowEntries).all(),
   getByPeriod: (period: string) =>
     db.select().from(flowEntries).where(eq(flowEntries.period, period)).all(),
+  getPeriods: () =>
+    db.selectDistinct({ period: flowEntries.period }).from(flowEntries).orderBy(desc(flowEntries.period)).all().map(r => r.period),
   upsert: (entry: NewFlowEntry) =>
     db.insert(flowEntries).values(entry).onConflictDoUpdate({
       target: [flowEntries.period, flowEntries.type, flowEntries.sub_type, flowEntries.category],
       set: { amount: entry.amount, date: entry.date, memo: entry.memo },
     }).run(),
+  deleteByPeriod: (period: string) =>
+    db.delete(flowEntries).where(eq(flowEntries.period, period)).run().changes,
 });
 
 export const createDataRepository = (db: Db): DataRepository => ({

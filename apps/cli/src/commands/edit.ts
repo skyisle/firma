@@ -2,6 +2,8 @@ import { cancel, isCancel, log, select, text } from '@clack/prompts';
 import pc from 'picocolors';
 import { getRepository } from '../db/index.ts';
 import type { Transaction, NewTransaction } from '@firma/db';
+import { addBalanceCommand } from './balance.ts';
+import { addFlowCommand } from './flow.ts';
 
 const guard = <T>(value: T | symbol): T => {
   if (isCancel(value)) { cancel('Cancelled'); process.exit(0); }
@@ -108,4 +110,50 @@ export const editTxnCommand = async (idArg?: string) => {
   }
 
   log.success(`Updated transaction #${id}.`);
+};
+
+const validatePeriod = (val: string) => {
+  if (!val.trim()) return 'Period is required';
+  if (!/^\d{4}-\d{2}$/.test(val.trim())) return 'Use YYYY-MM format';
+};
+
+const pickPeriod = async (label: string, periods: string[]): Promise<string> => {
+  if (periods.length === 0) {
+    return (guard(await text({
+      message: `${label} (no entries yet)`, placeholder: '2026-04', validate: validatePeriod,
+    })) as string).trim();
+  }
+  return guard(await select({
+    message: label,
+    options: periods.map(p => ({ value: p, label: p })),
+  })) as string;
+};
+
+const resolvePeriod = (arg: string | undefined, periods: string[], label: string) => {
+  if (!arg) return null;
+  if (!/^\d{4}-\d{2}$/.test(arg)) {
+    log.error(`Invalid period "${arg}". Use YYYY-MM format.`);
+    process.exit(1);
+  }
+  if (periods.length > 0 && !periods.includes(arg)) {
+    log.error(`No ${label} entries for ${arg}.`);
+    process.exit(1);
+  }
+  return arg;
+};
+
+export const editBalanceCommand = async (periodArg?: string) => {
+  const repo = getRepository();
+  const periods = repo.balance.getPeriods();
+  const period = resolvePeriod(periodArg, periods, 'balance')
+    ?? await pickPeriod('Select period to edit', periods);
+  await addBalanceCommand({ period });
+};
+
+export const editFlowCommand = async (periodArg?: string) => {
+  const repo = getRepository();
+  const periods = repo.flow.getPeriods();
+  const period = resolvePeriod(periodArg, periods, 'flow')
+    ?? await pickPeriod('Select period to edit', periods);
+  await addFlowCommand({ period });
 };
