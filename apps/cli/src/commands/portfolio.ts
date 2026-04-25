@@ -76,7 +76,7 @@ export const portfolioCommand = async () => {
   const items = await apiFetch<PortfolioItem[]>('/api/portfolio', { token });
 
   if (items.length === 0) {
-    log.warn('거래 내역이 없어요. `firma add`로 거래를 추가해보세요.');
+    log.warn('No transactions found. Run `firma add` to add your first trade.');
     return;
   }
 

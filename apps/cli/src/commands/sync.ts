@@ -5,12 +5,12 @@ import { requireAuth } from '../auth-guard.ts';
 export const syncCommand = async () => {
   const { token } = requireAuth();
   const s = spinner();
-  s.start('가격 동기화 중...');
+  s.start('Syncing prices...');
   try {
     const { synced } = await apiFetch<{ synced: number }>('/api/sync', { method: 'POST', token });
-    s.stop(synced > 0 ? `${synced}개 종목 업데이트 완료` : '보유 종목 없음');
+    s.stop(synced > 0 ? `Updated ${synced} stock${synced > 1 ? 's' : ''}` : 'No holdings to sync');
   } catch (err) {
-    s.stop('동기화 실패');
-    log.error(err instanceof Error ? err.message : '알 수 없는 오류');
+    s.stop('Sync failed');
+    log.error(err instanceof Error ? err.message : 'Unknown error');
   }
 };
