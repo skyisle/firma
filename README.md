@@ -87,7 +87,9 @@ Available in Claude Desktop after `firma mcp install`:
 |---|---|
 | `firma sync` | Fetch latest prices from Finnhub |
 | `firma portfolio` | Holdings overview with P&L |
-| `firma add` | Record a buy or sell transaction |
+| `firma add` | Record a transaction (buy / sell / deposit / dividend / tax) |
+| `firma edit [id]` | Edit a transaction |
+| `firma delete [id]` | Delete a transaction (alias `rm`) |
 | `firma txns [ticker]` | Transaction history with running avg cost |
 | `firma balance` | Monthly asset & liability snapshot |
 | `firma flow` | Monthly income & expense entry |

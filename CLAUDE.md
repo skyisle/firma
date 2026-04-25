@@ -37,7 +37,9 @@ packages/
 ```
 firma auth login          # Google OAuth → saves token to ~/.firma/config.json
 firma auth whoami         # Show logged-in account
-firma add                 # Interactive: add buy/sell transaction
+firma add                 # Interactive: add buy/sell/deposit/dividend/tax transaction
+firma edit [id]           # Edit a transaction (interactive picker if id omitted)
+firma delete [id]         # Delete a transaction (alias: rm)
 firma sync                # Fetch latest prices from Finnhub
 firma portfolio           # Holdings table with P&L
 firma flow                # Monthly income/expense tracking

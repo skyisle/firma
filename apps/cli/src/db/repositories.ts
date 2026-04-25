@@ -13,7 +13,17 @@ export const createTransactionRepository = (db: Db): TransactionRepository => ({
     ticker
       ? db.select().from(transactions).where(eq(transactions.ticker, ticker.toUpperCase())).orderBy(asc(transactions.date)).all()
       : db.select().from(transactions).orderBy(asc(transactions.date)).all(),
+  getById: (id: number) =>
+    db.select().from(transactions).where(eq(transactions.id, id)).get(),
   insert: (txn: NewTransaction) => db.insert(transactions).values(txn).run(),
+  update: (id: number, fields: Partial<NewTransaction>) => {
+    const res = db.update(transactions).set(fields).where(eq(transactions.id, id)).run();
+    return res.changes > 0;
+  },
+  delete: (id: number) => {
+    const res = db.delete(transactions).where(eq(transactions.id, id)).run();
+    return res.changes > 0;
+  },
 });
 
 export const createPriceRepository = (db: Db): PriceRepository => ({

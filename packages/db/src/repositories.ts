@@ -2,7 +2,10 @@ import type { Transaction, NewTransaction, BalanceEntry, NewBalanceEntry, FlowEn
 
 export interface TransactionRepository {
   getAll(ticker?: string): Transaction[];
+  getById(id: number): Transaction | undefined;
   insert(txn: NewTransaction): void;
+  update(id: number, fields: Partial<NewTransaction>): boolean;
+  delete(id: number): boolean;
 }
 
 export interface PriceRepository {

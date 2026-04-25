@@ -1,7 +1,7 @@
 import { log, note } from '@clack/prompts';
 import pc from 'picocolors';
 import { getRepository } from '../db/index.ts';
-import { aggregateHoldings } from '../services/portfolio.ts';
+import { aggregateHoldings } from '@firma/db';
 
 const fmt = {
   usd: (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,

@@ -8,6 +8,7 @@ import type { FinancialLineItem, FinancialPeriod } from '@firma/finnhub';
 import {
   getDb, getFinnhubKey,
   transactions, balanceEntries, flowEntries, prices,
+  aggregateHoldings, getActiveTickers,
 } from './db.ts';
 
 const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
@@ -34,43 +35,24 @@ server.tool(
   {},
   async () => {
     const db = getDb();
-    const txns = db.select().from(transactions).orderBy(asc(transactions.date)).all();
-    const priceRows = db.select().from(prices).all();
-    const priceMap = new Map(priceRows.map(p => [p.ticker, p]));
+    const txns = db.select().from(transactions).all();
+    const priceMap = new Map(db.select().from(prices).all().map(p => [p.ticker, p]));
 
-    const map = new Map<string, { shares: number; costShares: number; totalCost: number }>();
-    for (const t of txns) {
-      const h = map.get(t.ticker) ?? { shares: 0, costShares: 0, totalCost: 0 };
-      if (t.type === 'buy') {
-        h.shares += t.shares; h.costShares += t.shares; h.totalCost += t.shares * t.price;
-      } else if (t.type === 'sell') {
-        const prev = h.shares; h.shares -= t.shares;
-        h.costShares = prev > 0 ? h.costShares * (h.shares / prev) : 0;
-        h.totalCost = h.costShares > 0 ? h.costShares * (h.totalCost / h.costShares) : 0;
-      } else if (t.type === 'deposit') {
-        h.shares += t.shares;
-        if (t.price > 0) { h.costShares += t.shares; h.totalCost += t.shares * t.price; }
-      }
-      map.set(t.ticker, h);
-    }
-
-    const holdings = [...map.entries()]
-      .filter(([, h]) => h.shares > 0)
-      .map(([ticker, h]) => {
-        const p = priceMap.get(ticker);
-        const avgPrice = h.costShares > 0 ? h.totalCost / h.costShares : null;
-        const costBasis = avgPrice != null ? avgPrice * h.costShares : 0;
-        const marketValue = p ? p.current_price * h.shares : null;
-        return {
-          ticker, shares: h.shares, avgPrice, costBasis,
-          currentPrice: p?.current_price ?? null,
-          marketValue,
-          pnl: marketValue != null ? marketValue - costBasis : null,
-          pnlPct: marketValue != null && costBasis > 0 ? ((marketValue - costBasis) / costBasis) * 100 : null,
-          name: p?.name ?? null,
-          syncedAt: p?.synced_at ?? null,
-        };
-      });
+    const holdings = [...aggregateHoldings(txns).entries()].map(([ticker, h]) => {
+      const p = priceMap.get(ticker);
+      const avgPrice = h.costShares > 0 ? h.totalCost / h.costShares : null;
+      const costBasis = avgPrice != null ? avgPrice * h.costShares : 0;
+      const marketValue = p ? p.current_price * h.shares : null;
+      return {
+        ticker, shares: h.shares, avgPrice, costBasis,
+        currentPrice: p?.current_price ?? null,
+        marketValue,
+        pnl:    marketValue != null ? marketValue - costBasis : null,
+        pnlPct: marketValue != null && costBasis > 0 ? ((marketValue - costBasis) / costBasis) * 100 : null,
+        name:     p?.name ?? null,
+        syncedAt: p?.synced_at ?? null,
+      };
+    });
 
     return ok(holdings);
   },
@@ -148,6 +130,44 @@ server.tool(
 );
 
 server.tool(
+  'update_transaction',
+  'Update fields of an existing transaction by id. Only provided fields are changed.',
+  {
+    id:     z.number().int().positive(),
+    ticker: z.string().optional(),
+    date:   z.string().optional().describe('YYYY-MM-DD'),
+    type:   z.enum(['buy', 'sell', 'deposit', 'dividend', 'tax']).optional(),
+    shares: z.number().positive().optional(),
+    price:  z.number().min(0).optional(),
+    memo:   z.string().nullable().optional(),
+  },
+  async ({ id, ticker, ...rest }) => {
+    const db = getDb();
+    const fields = {
+      ...(ticker !== undefined ? { ticker: ticker.toUpperCase() } : {}),
+      ...rest,
+    };
+    if (Object.keys(fields).length === 0) return err('No fields to update');
+    const res = db.update(transactions).set(fields).where(eq(transactions.id, id)).run();
+    if (res.changes === 0) return err(`Transaction #${id} not found`);
+    const updated = db.select().from(transactions).where(eq(transactions.id, id)).get();
+    return ok(updated);
+  },
+);
+
+server.tool(
+  'delete_transaction',
+  'Delete a transaction by id',
+  { id: z.number().int().positive() },
+  async ({ id }) => {
+    const db = getDb();
+    const res = db.delete(transactions).where(eq(transactions.id, id)).run();
+    if (res.changes === 0) return err(`Transaction #${id} not found`);
+    return ok({ deleted: id });
+  },
+);
+
+server.tool(
   'set_balance_entry',
   'Upsert a balance sheet entry for a period. sub_type: cash|investment|other (assets) or short_term|long_term (liabilities)',
   {
@@ -202,14 +222,7 @@ server.tool(
     if (!apiKey) return err('Finnhub API key not configured. Run: firma config set finnhub-key <key>');
 
     const db = getDb();
-    const txns = db.select().from(transactions).all();
-    const net = new Map<string, number>();
-    for (const t of txns) {
-      const cur = net.get(t.ticker) ?? 0;
-      if (t.type === 'buy' || t.type === 'deposit') net.set(t.ticker, cur + t.shares);
-      else if (t.type === 'sell') net.set(t.ticker, cur - t.shares);
-    }
-    const tickers = [...net.entries()].filter(([, s]) => s > 0).map(([t]) => t);
+    const tickers = getActiveTickers(db.select().from(transactions).all());
     if (tickers.length === 0) return ok({ synced: 0 });
 
     const client = createFinnhubClient(apiKey);
@@ -377,15 +390,8 @@ server.tool(
         return ok((res.earningsCalendar ?? []).sort((a, b) => b.date.localeCompare(a.date)));
       }
 
-      const db   = getDb();
-      const txns = db.select().from(transactions).all();
-      const net  = new Map<string, number>();
-      for (const t of txns) {
-        const cur = net.get(t.ticker) ?? 0;
-        if (t.type === 'buy' || t.type === 'deposit') net.set(t.ticker, cur + t.shares);
-        else if (t.type === 'sell') net.set(t.ticker, cur - t.shares);
-      }
-      const tickers = [...net.entries()].filter(([, s]) => s > 0).map(([t]) => t);
+      const db = getDb();
+      const tickers = getActiveTickers(db.select().from(transactions).all());
 
       if (tickers.length === 0) return ok([]);
 

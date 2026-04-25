@@ -4,6 +4,8 @@ import { intro, outro, log } from '@clack/prompts';
 import pc from 'picocolors';
 import { syncCommand } from './commands/sync.ts';
 import { addCommand } from './commands/add.ts';
+import { editCommand } from './commands/edit.ts';
+import { deleteCommand } from './commands/delete.ts';
 import { portfolioCommand } from './commands/portfolio.ts';
 import { balanceCommand } from './commands/balance.ts';
 import { flowCommand } from './commands/flow.ts';
@@ -149,6 +151,25 @@ program
   .action(async () => {
     intro(pc.bgCyan(pc.black(' firma add ')));
     await addCommand();
+    outro('Done');
+  });
+
+program
+  .command('edit [id]')
+  .description('Edit a transaction (interactive picker if id omitted)')
+  .action(async (id?: string) => {
+    intro(pc.bgCyan(pc.black(' firma edit ')));
+    await editCommand(id);
+    outro('Done');
+  });
+
+program
+  .command('delete [id]')
+  .alias('rm')
+  .description('Delete a transaction (interactive picker if id omitted)')
+  .action(async (id?: string) => {
+    intro(pc.bgCyan(pc.black(' firma delete ')));
+    await deleteCommand(id);
     outro('Done');
   });
 

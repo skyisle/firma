@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { transactions, balanceEntries, flowEntries, prices } from '@firma/db';
+export { aggregateHoldings, getActiveTickers } from '@firma/db';
 import { homedir } from 'os';
 import { join } from 'path';
 import { mkdirSync, readFileSync } from 'fs';

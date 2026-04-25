@@ -4,7 +4,7 @@ import { createFinnhubClient } from '@firma/finnhub';
 import type { EarningsItem } from '@firma/finnhub';
 import { readConfig } from '../config.ts';
 import { getRepository } from '../db/index.ts';
-import { getActiveTickers } from '../services/portfolio.ts';
+import { getActiveTickers } from '@firma/db';
 
 const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
 

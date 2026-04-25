@@ -2,7 +2,7 @@ import { text, isCancel, cancel, log, note } from '@clack/prompts';
 import pc from 'picocolors';
 import { BALANCE_CATEGORIES } from '@firma/utils';
 import { getRepository } from '../db/index.ts';
-import { aggregateHoldings } from '../services/portfolio.ts';
+import { aggregateHoldings } from '@firma/db';
 import { fetchFxRates } from '../services/fx.ts';
 import { inputCategoryGroup, currentPeriod, periodEndDate, type EntryResult } from './ledger-input.ts';
 

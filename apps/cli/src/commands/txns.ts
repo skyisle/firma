@@ -16,7 +16,7 @@ const fmt = {
   num: (n: number) => n % 1 === 0 ? `${n}` : n.toFixed(4),
 };
 
-const COL = { DATE: 12, TICKER: 8, TYPE: 10, SHARES: 10, PRICE: 12, TOTAL: 14, AVG: 14 };
+const COL = { ID: 6, DATE: 12, TICKER: 8, TYPE: 10, SHARES: 10, PRICE: 12, TOTAL: 14, AVG: 14 };
 
 export const txnsCommand = async (ticker?: string, { json = false } = {}) => {
   const db = getDb();
@@ -41,6 +41,7 @@ export const txnsCommand = async (ticker?: string, { json = false } = {}) => {
   const showAvg = !!ticker;
 
   const header = [
+    pc.dim('ID'.padEnd(COL.ID)),
     pc.dim('DATE'.padEnd(COL.DATE)),
     ...(showTicker ? [pc.dim('TICKER'.padEnd(COL.TICKER))] : []),
     pc.dim('TYPE'.padEnd(COL.TYPE)),
@@ -50,7 +51,7 @@ export const txnsCommand = async (ticker?: string, { json = false } = {}) => {
     ...(showAvg ? [pc.dim('AVG COST')] : []),
   ].join('  ');
 
-  const totalWidth = COL.DATE + (showTicker ? COL.TICKER + 2 : 0) + COL.TYPE + COL.SHARES + COL.PRICE + COL.TOTAL + (showAvg ? COL.AVG + 2 : 0) + 8;
+  const totalWidth = COL.ID + COL.DATE + (showTicker ? COL.TICKER + 2 : 0) + COL.TYPE + COL.SHARES + COL.PRICE + COL.TOTAL + (showAvg ? COL.AVG + 2 : 0) + 10;
   const divider = pc.dim('─'.repeat(totalWidth));
 
   const ordered = showAvg ? [...txns].reverse() : txns;
@@ -75,6 +76,7 @@ export const txnsCommand = async (ticker?: string, { json = false } = {}) => {
 
       const avg = nc > 0 ? nt / nc : 0;
       const row = [
+        pc.dim(`#${t.id}`.padEnd(COL.ID)),
         pc.dim(t.date.padEnd(COL.DATE)),
         ...(showTicker ? [pc.bold(t.ticker.padEnd(COL.TICKER))] : []),
         colorType(t.type.padEnd(COL.TYPE)),

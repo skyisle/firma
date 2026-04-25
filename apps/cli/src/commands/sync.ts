@@ -2,7 +2,7 @@ import { log, spinner } from '@clack/prompts';
 import { getRepository } from '../db/index.ts';
 import { readConfig } from '../config.ts';
 import { createPriceProvider } from '../providers/prices.ts';
-import { getActiveTickers } from '../services/portfolio.ts';
+import { getActiveTickers } from '@firma/db';
 
 export const syncCommand = async ({ json = false } = {}) => {
   const apiKey = readConfig()?.finnhub_api_key;
