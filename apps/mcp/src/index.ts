@@ -15,7 +15,7 @@ const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
 
 const server = new McpServer({
   name: 'firma',
-  version: '0.1.0',
+  version: '0.3.0',
 });
 
 

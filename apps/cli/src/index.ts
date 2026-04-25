@@ -79,7 +79,7 @@ const wrapMaybeJson = <Args extends unknown[]>(
 program
   .name('firma')
   .description('Personal asset tracker for overseas investors')
-  .version('0.2.1');
+  .version('0.3.0');
 
 // ── add ────────────────────────────────────────────────
 const add = program.command('add').description('Record a new entry');

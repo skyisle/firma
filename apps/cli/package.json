@@ -1,20 +1,51 @@
 {
   "name": "firma-app",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "type": "module",
-  "description": "CLI personal asset tracker for overseas investors",
+  "description": "Local-first, AI-native CLI asset tracker for overseas stock investors. Built-in MCP server for Claude Desktop.",
+  "keywords": [
+    "cli",
+    "finance",
+    "portfolio",
+    "stock",
+    "tracker",
+    "mcp",
+    "claude",
+    "anthropic",
+    "ai",
+    "investing",
+    "personal-finance",
+    "sqlite",
+    "local-first",
+    "finnhub"
+  ],
+  "homepage": "https://github.com/evan-moon/firma#readme",
+  "bugs": {
+    "url": "https://github.com/evan-moon/firma/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/evan-moon/firma.git",
+    "directory": "apps/cli"
+  },
+  "license": "MIT",
+  "author": "Evan Moon <bboydart91@gmail.com> (https://github.com/evan-moon)",
   "bin": {
     "firma": "./dist/index.js",
     "firma-mcp": "./dist/mcp.js"
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "dev": "tsx src/index.ts",
-    "build": "tsup src/index.ts --format esm --minify --no-splitting && yarn workspace @firma/mcp build && cp ../mcp/dist/index.js dist/mcp.js && cp ../../README.md README.md",
+    "build": "tsup src/index.ts --format esm --minify --no-splitting && yarn workspace @firma/mcp build && cp ../mcp/dist/index.js dist/mcp.js && cp ../../README.md README.md && cp ../../LICENSE LICENSE",
     "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "dependencies": {
     "@clack/prompts": "^0.9.1",
