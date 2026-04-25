@@ -15,7 +15,6 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/firma-app"><img src="https://img.shields.io/npm/v/firma-app.svg?style=flat&color=cb3837&logo=npm" alt="npm version"></a>
-  <a href="https://www.npmjs.com/package/firma-app"><img src="https://img.shields.io/npm/dm/firma-app.svg?style=flat&color=cb3837" alt="npm downloads"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat" alt="License: MIT"></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%3E%3D22-339933?style=flat&logo=node.js&logoColor=white" alt="Node >= 22"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-strict-3178c6?style=flat&logo=typescript&logoColor=white" alt="TypeScript"></a>
@@ -40,7 +39,7 @@ Claude:  Total market value is $147,509, up +$55,870 (+60.9%) from cost basis.
          TSLA (392 shares) is driving most of the gain.
 
 You:     Spending feels high this month. How does it compare to last year?
-Claude:  March 2026 expenses were ₩4,230,000 — up 18% vs. March 2025.
+Claude:  March 2026 expenses were $3,050 — up 18% vs. March 2025.
          Savings rate dropped from 41% to 34%.
 
 You:     I just bought 15 shares of AAPL at $211. Log it.
@@ -55,6 +54,10 @@ Claude:  [renders live portfolio dashboard — holdings, net worth trend, asset 
 </p>
 
 In the terminal:
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/evan-moon/firma/main/assets/demo.gif" alt="firma CLI demo" width="700" />
+</p>
 
 ```
 $ firma show portfolio
@@ -81,7 +84,7 @@ $ firma show portfolio
 
 - **Local-first by design.** Your transactions, balances, and cash flow live in `~/.firma/firma.db` — a single SQLite file. Nothing syncs anywhere unless you ask it to.
 - **MCP-native.** Every CLI command has a matching MCP tool, so Claude can do everything you can — analyze, log, reconcile — through natural conversation.
-- **Built for overseas investors.** First-class USD/KRW handling, fxratesapi auto-conversion, KRW-denominated balance sheets, and Finnhub-powered prices for U.S. equities.
+- **Built for overseas investors.** Multi-currency support (USD, KRW, EUR, JPY, and more), fxratesapi auto-conversion, and Finnhub-powered prices for U.S. equities.
 - **Transactions as source of truth.** No holdings table to drift out of sync — your portfolio is always derived from your trade log. Buy/sell/deposit/dividend/tax all supported.
 - **Developer-first UX.** `--json` output on every read command, scriptable, pipe-friendly. Three clean verb groups: `add`, `show`, `report`.
 
