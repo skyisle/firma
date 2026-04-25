@@ -29,61 +29,39 @@ packages/
 ## Key Design Decisions
 
 - **Transactions as source of truth** — holdings are derived via aggregation, no holdings table
-- **Central price cache** — `prices` table shared across all users, updated by sync/cron
-- **CLI auth via Google OAuth** — local HTTP server on port 54321 captures the callback code
-- **JWT auth** — CLI sends `Authorization: Bearer <token>` to server; tokens stored in `~/.firma/config.json`
-- **Supabase** — Auth (Google OAuth) + Postgres DB with RLS
-
-## Supabase
-
-Project URL: `https://kahzxbqbelpcndbmpste.supabase.co`
-Schema: `supabase/schema.sql`
-Tables: `transactions` (per-user, RLS), `prices` (shared cache, public read)
-
-## Server API Routes
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | /api/auth/login | — | Email/password login (returns JWT) |
-| POST | /api/auth/register | — | Email/password register |
-| GET | /auth/confirm | — | Supabase email confirmation callback |
-| GET | /api/transactions | Bearer | List user transactions |
-| POST | /api/transactions | Bearer | Add transaction |
-| GET | /api/portfolio | Bearer | Aggregated holdings + prices |
-| POST | /api/sync | Bearer/Cron | Fetch prices from Finnhub → upsert |
-| GET | /api/prices/[ticker] | Bearer | Single ticker price (cache-first) |
+- **Local SQLite** — all data stored in `~/.firma/firma.db` via better-sqlite3 + Drizzle ORM
+- **Finnhub** — stock price provider; API key stored in `~/.firma/config.json`
 
 ## CLI Commands
 
 ```
-firma auth login     # Google OAuth → saves JWT to ~/.firma/config.json
-firma auth whoami    # Show logged-in account
-firma add            # Interactive: add buy/sell transaction
-firma sync           # Fetch latest prices for all holdings
-firma portfolio      # Display holdings table with P&L
-firma flow           # (TODO) Income/expense tracking
+firma auth login          # Google OAuth → saves token to ~/.firma/config.json
+firma auth whoami         # Show logged-in account
+firma add                 # Interactive: add buy/sell transaction
+firma sync                # Fetch latest prices from Finnhub
+firma portfolio           # Holdings table with P&L
+firma flow                # Monthly income/expense tracking
+firma balance             # Monthly asset/liability snapshot
+firma settle              # Month-end settlement report
+firma report              # Combined balance + cash flow report
+firma txns [ticker]       # Transaction history
+firma news <ticker>       # Recent company news (Finnhub)
+firma insider <ticker>    # Insider buy/sell transactions (Finnhub)
+firma financials <ticker> # SEC-reported financials (Finnhub)
+firma earnings [ticker]   # Earnings calendar (Finnhub)
+firma mcp install         # Register MCP server in Claude Desktop
 ```
 
 ## Dev
 
 ```bash
-yarn dev:server   # Next.js on localhost:3000
 yarn dev:cli      # Run CLI (e.g. yarn dev:cli portfolio)
 yarn typecheck    # Turbo typecheck across all packages
 ```
 
-## Env
-
-`apps/server/.env.local` — see `.env.local.example` for required vars.
-
 ## Pending
 
-- [ ] `firma flow` — income/expense tracking
-- [ ] Money Scope feature parity (see conversation for full list)
 - [ ] Token refresh (JWT expires after 1h)
 - [ ] `firma auth logout`
-- [ ] Vercel deployment
-- [ ] Vercel Cron for scheduled price sync
 - [ ] Portfolio snapshots (historical value tracking)
 - [ ] npm publish (`npm install -g firma-app`)
-- [ ] MCP server for AI integration
