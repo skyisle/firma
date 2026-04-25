@@ -40,3 +40,87 @@ export type StockData = {
   eps: number | null;
   marketCap: number;
 };
+
+// ── Company News ──────────────────────────────────────────────────────────────
+
+export type NewsItem = {
+  id: number;
+  category: string;
+  datetime: number;
+  headline: string;
+  image: string;
+  related: string;
+  source: string;
+  summary: string;
+  url: string;
+};
+
+// ── Insider Transactions ──────────────────────────────────────────────────────
+
+export type InsiderTransaction = {
+  name: string;
+  share: number;
+  change: number;
+  filingDate: string;
+  transactionDate: string;
+  transactionCode: string;
+  transactionPrice: number;
+};
+
+export type InsiderTransactionsResponse = {
+  data: InsiderTransaction[];
+  symbol: string;
+};
+
+// ── Earnings Calendar ─────────────────────────────────────────────────────────
+
+export type EarningsItem = {
+  date: string;
+  epsActual: number | null;
+  epsEstimate: number | null;
+  hour: string;
+  quarter: number;
+  revenueActual: number | null;
+  revenueEstimate: number | null;
+  symbol: string;
+  year: number;
+};
+
+export type EarningsCalendarResponse = {
+  earningsCalendar: EarningsItem[];
+};
+
+// ── Financials Reported ───────────────────────────────────────────────────────
+
+export type FinancialLineItem = {
+  concept: string;
+  label: string;
+  unit: string;
+  value: number;
+};
+
+export type FinancialReport = {
+  bs: FinancialLineItem[];
+  cf: FinancialLineItem[];
+  ic: FinancialLineItem[];
+};
+
+export type FinancialPeriod = {
+  accessNumber: string;
+  symbol: string;
+  cik: string;
+  year: number;
+  quarter: number;
+  form: string;
+  startDate: string;
+  endDate: string;
+  filedDate: string;
+  acceptedDate: string;
+  report: FinancialReport;
+};
+
+export type FinancialsReportedResponse = {
+  cik: string;
+  data: FinancialPeriod[];
+  symbol: string;
+};

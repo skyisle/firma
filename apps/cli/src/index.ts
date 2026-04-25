@@ -13,6 +13,10 @@ import { reportCommand, type Currency } from './commands/report.ts';
 import { loginCommand } from './commands/auth/login.ts';
 import { whoamiCommand } from './commands/auth/whoami.ts';
 import { logoutCommand } from './commands/auth/logout.ts';
+import { newsCommand } from './commands/news.ts';
+import { insiderCommand } from './commands/insider.ts';
+import { financialsCommand } from './commands/financials.ts';
+import { earningsCommand } from './commands/earnings.ts';
 import { setConfigValue, readConfig } from './config.ts';
 import { mcpInstallCommand } from './commands/mcp.ts';
 
@@ -208,6 +212,54 @@ program
   .action(async (ticker: string | undefined, opts: { json?: boolean }) => {
     if (!opts.json) intro(pc.bgCyan(pc.black(' firma txns ')));
     await txnsCommand(ticker, { json: opts.json ?? false });
+    if (!opts.json) outro('Done');
+  });
+
+// ── market data ───────────────────────────────────────────────────────────────
+
+program
+  .command('news <ticker>')
+  .description('Latest company news from Finnhub')
+  .option('--days <n>',  'Days to look back (default: 7)', '7')
+  .option('--limit <n>', 'Max articles to show (default: 10)', '10')
+  .option('--json',      'Output as JSON')
+  .action(async (ticker: string, opts: { days: string; limit: string; json?: boolean }) => {
+    if (!opts.json) intro(pc.bgCyan(pc.black(' firma news ')));
+    await newsCommand(ticker, { json: opts.json ?? false, days: Number(opts.days), limit: Number(opts.limit) });
+    if (!opts.json) outro('Done');
+  });
+
+program
+  .command('insider <ticker>')
+  .description('Insider buy/sell transactions from Finnhub')
+  .option('--limit <n>', 'Max transactions to show (default: 20)', '20')
+  .option('--json',      'Output as JSON')
+  .action(async (ticker: string, opts: { limit: string; json?: boolean }) => {
+    if (!opts.json) intro(pc.bgCyan(pc.black(' firma insider ')));
+    await insiderCommand(ticker, { json: opts.json ?? false, limit: Number(opts.limit) });
+    if (!opts.json) outro('Done');
+  });
+
+program
+  .command('financials <ticker>')
+  .description('SEC-reported financials (income, cash flow, balance sheet)')
+  .option('--annual',    'Show annual periods instead of quarterly')
+  .option('--limit <n>', 'Number of periods to show (default: 4)', '4')
+  .option('--json',      'Output as JSON')
+  .action(async (ticker: string, opts: { annual?: boolean; limit: string; json?: boolean }) => {
+    if (!opts.json) intro(pc.bgCyan(pc.black(' firma financials ')));
+    await financialsCommand(ticker, { json: opts.json ?? false, annual: opts.annual ?? false, limit: Number(opts.limit) });
+    if (!opts.json) outro('Done');
+  });
+
+program
+  .command('earnings [ticker]')
+  .description('Earnings calendar — upcoming (all holdings) or history+upcoming (single ticker)')
+  .option('--weeks <n>', 'Look-ahead window in weeks (default: 4)', '4')
+  .option('--json',      'Output as JSON')
+  .action(async (ticker: string | undefined, opts: { weeks: string; json?: boolean }) => {
+    if (!opts.json) intro(pc.bgCyan(pc.black(' firma earnings ')));
+    await earningsCommand(ticker, { json: opts.json ?? false, weeks: Number(opts.weeks) });
     if (!opts.json) outro('Done');
   });
 

@@ -1,5 +1,13 @@
-export type { StockData } from './types.ts';
-import type { Metric, Profile, Quote, StockData } from './types.ts';
+export type {
+  StockData, NewsItem, InsiderTransaction, InsiderTransactionsResponse,
+  EarningsItem, EarningsCalendarResponse,
+  FinancialLineItem, FinancialReport, FinancialPeriod, FinancialsReportedResponse,
+} from './types.ts';
+
+import type {
+  Metric, Profile, Quote, StockData,
+  NewsItem, InsiderTransactionsResponse, EarningsCalendarResponse, FinancialsReportedResponse,
+} from './types.ts';
 
 const BASE_URL = 'https://finnhub.io/api/v1';
 
@@ -15,9 +23,24 @@ const createFinnhubFetcher = (apiKey: string) => {
   };
 
   return {
-    getQuote: (ticker: string) => get<Quote>('/quote', { symbol: ticker }),
+    getQuote:   (ticker: string) => get<Quote>('/quote', { symbol: ticker }),
     getProfile: (ticker: string) => get<Profile>('/stock/profile2', { symbol: ticker }),
-    getMetric: (ticker: string) => get<Metric>('/stock/metric', { symbol: ticker, metric: 'all' }),
+    getMetric:  (ticker: string) => get<Metric>('/stock/metric', { symbol: ticker, metric: 'all' }),
+
+    getCompanyNews: (ticker: string, from: string, to: string) =>
+      get<NewsItem[]>('/company-news', { symbol: ticker, from, to }),
+
+    getInsiderTransactions: (ticker: string) =>
+      get<InsiderTransactionsResponse>('/stock/insider-transactions', { symbol: ticker }),
+
+    getEarningsCalendar: (from: string, to: string, symbol?: string) => {
+      const params: Record<string, string> = { from, to };
+      if (symbol) params.symbol = symbol;
+      return get<EarningsCalendarResponse>('/calendar/earnings', params);
+    },
+
+    getFinancialsReported: (ticker: string, freq: 'annual' | 'quarterly' = 'quarterly') =>
+      get<FinancialsReportedResponse>('/stock/financials-reported', { symbol: ticker, freq }),
   };
 };
 
@@ -57,5 +80,10 @@ export const createFinnhubClient = (apiKey: string) => {
     getStockData,
     getStockDataBatch: (tickers: string[]): Promise<StockData[]> =>
       Promise.all(tickers.map(getStockData)),
+
+    getCompanyNews: fetcher.getCompanyNews,
+    getInsiderTransactions: fetcher.getInsiderTransactions,
+    getEarningsCalendar: fetcher.getEarningsCalendar,
+    getFinancialsReported: fetcher.getFinancialsReported,
   };
 };
