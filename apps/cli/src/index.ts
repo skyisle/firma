@@ -5,6 +5,9 @@ import pc from 'picocolors';
 import { syncCommand } from './commands/sync.ts';
 import { addCommand } from './commands/add.ts';
 import { portfolioCommand } from './commands/portfolio.ts';
+import { balanceCommand } from './commands/balance.ts';
+import { flowCommand } from './commands/flow.ts';
+import { settleCommand } from './commands/settle.ts';
 import { loginCommand } from './commands/auth/login.ts';
 import { whoamiCommand } from './commands/auth/whoami.ts';
 
@@ -56,7 +59,7 @@ program
 
 program
   .command('add')
-  .description('Add a transaction')
+  .description('Add a stock transaction')
   .action(async () => {
     intro(pc.bgCyan(pc.black(' firma add ')));
     await addCommand();
@@ -65,10 +68,28 @@ program
 
 program
   .command('flow')
-  .description('Add income or expense')
+  .description('Record monthly income & expenses')
   .action(async () => {
     intro(pc.bgCyan(pc.black(' firma flow ')));
-    // TODO
+    await flowCommand();
+    outro('Done');
+  });
+
+program
+  .command('balance')
+  .description('Record monthly asset & liability snapshot')
+  .action(async () => {
+    intro(pc.bgCyan(pc.black(' firma balance ')));
+    await balanceCommand();
+    outro('Done');
+  });
+
+program
+  .command('settle')
+  .description('Month-end settlement: balance sheet + cash flow')
+  .action(async () => {
+    intro(pc.bgCyan(pc.black(' firma settle ')));
+    await settleCommand();
     outro('Done');
   });
 
