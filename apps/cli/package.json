@@ -8,11 +8,12 @@
     "firma-mcp": "./dist/mcp.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "dev": "tsx src/index.ts",
-    "build": "tsup src/index.ts --format esm --minify --no-splitting && yarn workspace @firma/mcp build && cp ../mcp/dist/index.js dist/mcp.js",
+    "build": "tsup src/index.ts --format esm --minify --no-splitting && yarn workspace @firma/mcp build && cp ../mcp/dist/index.js dist/mcp.js && cp ../../README.md README.md",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
