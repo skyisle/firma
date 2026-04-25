@@ -64,8 +64,8 @@ const wrapMaybeJson = <Args extends unknown[]>(
   fn: (...args: Args) => Promise<void> | void,
   isJson: (...args: Args) => boolean,
 ) => async (...args: Args) => {
-  const updatePromise = checkForUpdate(CURRENT_VERSION);
   const json = isJson(...args);
+  const updatePromise = json ? Promise.resolve(null) : checkForUpdate(CURRENT_VERSION);
   if (!json) intro(pc.bgCyan(pc.black(` ${label} `)));
   await fn(...args);
   if (!json) await notifyUpdate(updatePromise);
