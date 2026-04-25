@@ -1,62 +1,38 @@
 import { log, spinner } from '@clack/prompts';
-import { getRepository } from '../db/index.ts';
-import { readConfig } from '../config.ts';
-import { createPriceProvider } from '../providers/prices.ts';
-import { getActiveTickers } from '@firma/db';
+import { syncPrices } from '../services/sync.ts';
 
 export const syncCommand = async ({ json = false } = {}) => {
-  const apiKey = readConfig()?.finnhub_api_key;
-  if (!apiKey) {
-    if (json) { process.stdout.write(JSON.stringify({ error: 'Finnhub API key not set. Run: firma config set finnhub-key <your-key>' }) + '\n'); process.exit(1); }
-    log.error('Finnhub API key not set. Run: firma config set finnhub-key <your-key>');
-    log.info('Get a free key at https://finnhub.io');
-    return;
-  }
-
-  const repo = getRepository();
-  const tickers = getActiveTickers(repo.transactions.getAll());
-  if (tickers.length === 0) {
-    if (json) { process.stdout.write(JSON.stringify({ count: 0, synced: [] }) + '\n'); return; }
-    log.warn('No holdings to sync.');
-    return;
-  }
-
   const s = json ? null : spinner();
-  s?.start(`Syncing ${tickers.length} stock${tickers.length > 1 ? 's' : ''}...`);
+  s?.start('Syncing prices...');
 
-  try {
-    const provider = createPriceProvider(apiKey);
-    const results = await provider.getStockDataBatch(tickers);
-    const now = new Date().toISOString();
+  const result = await syncPrices();
 
-    const priceData = results
-      .filter(r => r.currentPrice > 0)
-      .map(d => ({
-        ticker:         d.ticker,
-        name:           d.name ?? d.ticker,
-        exchange:       d.exchange ?? '',
-        currency:       d.currency ?? 'USD',
-        current_price:  d.currentPrice,
-        prev_close:     d.prevClose ?? 0,
-        change_percent: d.changePercent ?? 0,
-        high_52w:       d.high52w ?? 0,
-        low_52w:        d.low52w ?? 0,
-        pe:             d.pe ?? null,
-        eps:            d.eps ?? null,
-        market_cap:     d.marketCap ?? 0,
-        synced_at:      now,
-      }));
+  if (!result.ok) {
+    s?.stop(result.reason === 'no-key' ? 'No API key' : result.reason === 'no-holdings' ? 'No holdings' : 'Sync failed');
 
-    repo.prices.upsertBatch(priceData);
+    const messages: Record<typeof result.reason, string> = {
+      'no-key':       'Finnhub API key not set. Run: firma config set finnhub-key <your-key>',
+      'no-holdings':  'No holdings to sync.',
+      'fetch-failed': result.error ?? 'Sync failed',
+    };
 
     if (json) {
-      process.stdout.write(JSON.stringify({ count: priceData.length, synced: priceData }) + '\n');
-    } else {
-      s!.stop(`Updated ${priceData.length} stock${priceData.length !== 1 ? 's' : ''}`);
+      process.stdout.write(JSON.stringify(
+        result.reason === 'no-holdings' ? { count: 0, synced: [] } : { error: messages[result.reason] },
+      ) + '\n');
+      if (result.reason !== 'no-holdings') process.exit(1);
+      return;
     }
-  } catch (err) {
-    if (json) { process.stdout.write(JSON.stringify({ error: err instanceof Error ? err.message : 'Sync failed' }) + '\n'); process.exit(1); }
-    s!.stop('Sync failed');
-    log.error(err instanceof Error ? err.message : 'Unknown error');
+
+    if (result.reason === 'no-holdings') log.warn(messages[result.reason]);
+    else log.error(messages[result.reason]);
+    if (result.reason === 'no-key') log.info('Get a free key at https://finnhub.io');
+    return;
+  }
+
+  if (json) {
+    process.stdout.write(JSON.stringify({ count: result.count }) + '\n');
+  } else {
+    s!.stop(`Updated ${result.count} stock${result.count !== 1 ? 's' : ''}`);
   }
 };

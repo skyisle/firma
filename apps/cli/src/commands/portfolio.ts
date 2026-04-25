@@ -1,7 +1,8 @@
-import { log, note } from '@clack/prompts';
+import { log, note, spinner } from '@clack/prompts';
 import pc from 'picocolors';
 import { getRepository } from '../db/index.ts';
 import { aggregateHoldings } from '@firma/db';
+import { syncPrices } from '../services/sync.ts';
 
 const fmt = {
   usd: (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
@@ -12,14 +13,28 @@ const fmt = {
 const colorPnl = (n: number, text: string) => n >= 0 ? pc.green(text) : pc.red(text);
 const COL = { TICKER: 8, SHARES: 8, AVG: 12, PRICE: 12, PNL: 22 };
 
-export const showPortfolioCommand = async ({ json = false } = {}) => {
+export const showPortfolioCommand = async ({ json = false, sync = true } = {}) => {
   const repo = getRepository();
   const holdings = aggregateHoldings(repo.transactions.getAll());
 
   if (holdings.size === 0) {
     if (json) { process.stdout.write('[]\n'); return; }
-    log.warn('No transactions found. Run `firma add` to add your first trade.');
+    log.warn('No transactions found. Run `firma add txn` to add your first trade.');
     return;
+  }
+
+  if (sync) {
+    if (json) {
+      await syncPrices();
+    } else {
+      const s = spinner();
+      s.start('Syncing prices...');
+      const r = await syncPrices();
+      if (r.ok)                          s.stop(`Synced ${r.count} stock${r.count !== 1 ? 's' : ''}`);
+      else if (r.reason === 'no-key')    s.stop(pc.dim('No Finnhub key — showing cached prices'));
+      else if (r.reason === 'no-holdings') s.stop(pc.dim('No holdings to sync'));
+      else                               s.stop(pc.yellow('Sync failed — showing cached prices'));
+    }
   }
 
   const tickers = [...holdings.keys()];

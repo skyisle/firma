@@ -113,10 +113,11 @@ const show = program.command('show').description('Show data (use --json for scri
 show
   .command('portfolio')
   .alias('p')
-  .description('Holdings overview with P&L')
-  .option('--json', 'Output as JSON')
+  .description('Holdings overview with P&L (auto-syncs prices first)')
+  .option('--json',     'Output as JSON')
+  .option('--no-sync',  'Skip price sync, use cached prices')
   .action(wrapMaybeJson('firma show portfolio',
-    (opts: { json?: boolean }) => showPortfolioCommand({ json: opts.json ?? false }),
+    (opts: { json?: boolean; sync: boolean }) => showPortfolioCommand({ json: opts.json ?? false, sync: opts.sync }),
     (opts) => opts.json ?? false));
 
 show
