@@ -36,3 +36,6 @@ jobs:
       - name: Publish
         run: npm publish --access public --provenance
         working-directory: apps/cli
+        env:
+          NODE_AUTH_TOKEN: ''
+          NPM_CONFIG_USERCONFIG: ''
