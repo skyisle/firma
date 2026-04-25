@@ -30,7 +30,7 @@ const getOverseasStockKRW = async (): Promise<number> => {
   const rateInput = await text({
     message: 'USD/KRW exchange rate (auto-fetch failed)',
     placeholder: '1380',
-    validate: v => (!v.trim() || isNaN(Number(v))) ? 'Enter a valid rate' : undefined,
+    validate: v => (!v.trim() || isNaN(Number(v)) || Number(v) <= 0) ? 'Enter a valid rate' : undefined,
   });
   if (isCancel(rateInput)) { cancel('Cancelled'); process.exit(0); }
   return Math.round(totalUSD * Number(rateInput));

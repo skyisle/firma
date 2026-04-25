@@ -72,7 +72,8 @@ export const currentPeriod = () => {
 
 export const periodEndDate = (period: string) => {
   const [y, m] = period.split('-').map(Number);
-  return new Date(y, m, 0).toISOString().split('T')[0];
+  const d = new Date(y, m, 0);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
 export const printSummary = (label: string, entries: EntryResult[]) => {
