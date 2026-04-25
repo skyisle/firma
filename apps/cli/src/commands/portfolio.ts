@@ -19,55 +19,62 @@ type PortfolioItem = {
 const fmt = {
   usd: (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
   pct: (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`,
-  shares: (n: number) => `${n % 1 === 0 ? n : n.toFixed(4)}주`,
+  shares: (n: number) => n % 1 === 0 ? `${n}` : n.toFixed(4),
 };
 
 const colorPnl = (n: number, text: string) => n >= 0 ? pc.green(text) : pc.red(text);
-const pad = (str: string, len: number) => str.padEnd(len);
+
+// Korean/CJK chars occupy 2 columns in terminal
+const visualWidth = (str: string) =>
+  [...str].reduce((w, c) => w + ((c.codePointAt(0) ?? 0) > 0x2E7F ? 2 : 1), 0);
+
+const wpad = (str: string, target: number) =>
+  str + ' '.repeat(Math.max(0, target - visualWidth(str)));
+
+const COL = { TICKER: 8, SHARES: 8, AVG: 12, PRICE: 12, PNL: 22 };
 
 const renderTable = (items: PortfolioItem[]) => {
-  const TICKER_W = 8, SHARES_W = 10, PRICE_W = 12;
-
   const header = [
-    pc.dim(pad('티커', TICKER_W)),
-    pc.dim(pad('수량', SHARES_W)),
-    pc.dim(pad('평단가', PRICE_W)),
-    pc.dim(pad('현재가', PRICE_W)),
-    pc.dim('평가손익'),
-  ].join('');
+    pc.dim('TICKER'.padEnd(COL.TICKER)),
+    pc.dim('QTY'.padEnd(COL.SHARES)),
+    pc.dim('AVG'.padEnd(COL.AVG)),
+    pc.dim('PRICE'.padEnd(COL.PRICE)),
+    pc.dim('P&L'),
+  ].join('  ');
+
+  const divider = pc.dim('─'.repeat(COL.TICKER + COL.SHARES + COL.AVG + COL.PRICE + COL.PNL + 8));
 
   const rows = items.map(item => {
     const pnlText = item.pnl != null && item.pnlPct != null
       ? `${fmt.usd(item.pnl)} (${fmt.pct(item.pnlPct)})`
-      : pc.dim('sync 필요');
+      : pc.dim('─');
     return [
-      pc.bold(pad(item.ticker, TICKER_W)),
-      pad(fmt.shares(item.shares), SHARES_W),
-      pad(fmt.usd(item.avgPrice), PRICE_W),
-      pad(item.currentPrice != null ? fmt.usd(item.currentPrice) : pc.dim('-'), PRICE_W),
+      pc.bold(item.ticker.padEnd(COL.TICKER)),
+      fmt.shares(item.shares).padEnd(COL.SHARES),
+      fmt.usd(item.avgPrice).padEnd(COL.AVG),
+      (item.currentPrice != null ? fmt.usd(item.currentPrice) : pc.dim('─')).padEnd(COL.PRICE),
       item.pnl != null ? colorPnl(item.pnl, pnlText) : pnlText,
-    ].join('');
+    ].join('  ');
   });
-
-  const divider = pc.dim('─'.repeat(TICKER_W + SHARES_W + PRICE_W * 2 + 24));
 
   const totalCost = items.reduce((s, i) => s + i.costBasis, 0);
   const totalValue = items.reduce((s, i) => s + (i.marketValue ?? i.costBasis), 0);
   const totalPnl = totalValue - totalCost;
   const totalPnlPct = (totalPnl / totalCost) * 100;
 
+  const LBL = 10;
   const summary = [
-    `${pc.dim('총 평가액')}   ${pc.bold(fmt.usd(totalValue))}`,
-    `${pc.dim('총 투자원금')}  ${fmt.usd(totalCost)}`,
-    `${pc.dim('총 수익')}    ${colorPnl(totalPnl, `${fmt.usd(totalPnl)} (${fmt.pct(totalPnlPct)})`)}`,
+    `${pc.dim(wpad('평가액', LBL))}${pc.bold(fmt.usd(totalValue))}`,
+    `${pc.dim(wpad('투자원금', LBL))}${fmt.usd(totalCost)}`,
+    `${pc.dim(wpad('손익', LBL))}${colorPnl(totalPnl, `${fmt.usd(totalPnl)}  ${fmt.pct(totalPnlPct)}`)}`,
   ].join('\n');
 
   const syncedAt = items.find(i => i.syncedAt)?.syncedAt;
   const lastSynced = syncedAt
-    ? pc.dim(`\n마지막 동기화: ${new Date(syncedAt).toLocaleString('ko-KR')}`)
+    ? `\n${pc.dim('sync  ' + new Date(syncedAt).toLocaleString('ko-KR'))}`
     : '';
 
-  note(`${header}\n${rows.join('\n')}\n${divider}\n${summary}${lastSynced}`, '포트폴리오');
+  note(`${header}\n${divider}\n${rows.join('\n')}\n${divider}\n${summary}${lastSynced}`, '포트폴리오');
 };
 
 export const portfolioCommand = async () => {
