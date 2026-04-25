@@ -23,7 +23,6 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
-      # better-sqlite3 needs build tools on Ubuntu
       - name: Install build tools (Ubuntu)
         if: runner.os == 'Linux'
         run: sudo apt-get install -y build-essential python3
@@ -61,26 +60,11 @@ jobs:
       - name: firma --help
         run: firma --help
 
-      # Write a fake auth token so guarded commands pass the auth check
-      - name: Setup CI auth (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          mkdir -p ~/.firma
-          echo '{"access_token":"ci-token","user":{"id":"ci","email":"ci@test.com"}}' > ~/.firma/config.json
+      - name: firma show portfolio --json (empty DB)
+        run: firma show portfolio --json --no-sync
 
-      - name: Setup CI auth (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $dir = "$env:USERPROFILE\.firma"
-          New-Item -ItemType Directory -Force -Path $dir | Out-Null
-          '{"access_token":"ci-token","user":{"id":"ci","email":"ci@test.com"}}' | Out-File -FilePath "$dir\config.json" -Encoding utf8
-
-      - name: firma portfolio --json (empty DB)
-        run: firma portfolio --json
-
-      - name: firma txns --json (empty DB)
-        run: firma txns --json
+      - name: firma show txns --json (empty DB)
+        run: firma show txns --json
 
       - name: firma report --json (empty DB)
         run: firma report --json
