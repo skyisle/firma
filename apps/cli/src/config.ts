@@ -22,16 +22,16 @@ export const readConfig = (): Config | null => {
   }
 };
 
-export const writeConfig = (config: Config): void => {
+export const writeConfig = (config: Config) => {
   mkdirSync(CONFIG_DIR, { recursive: true });
   writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
 };
 
-export const setConfigValue = (key: keyof Config, value: string): void => {
+export const setConfigValue = (key: keyof Config, value: string) => {
   const config = readConfig() ?? {};
   writeConfig({ ...config, [key]: value });
 };
 
-export const clearConfig = (): void => {
+export const clearConfig = () => {
   try { unlinkSync(CONFIG_PATH); } catch {}
 };

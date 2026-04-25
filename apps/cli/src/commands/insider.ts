@@ -3,7 +3,6 @@ import pc from 'picocolors';
 import { createFinnhubClient } from '@firma/finnhub';
 import { readConfig } from '../config.ts';
 
-// Visible length of a string (strips ANSI escape codes for column math)
 const visLen = (s: string) => s.replace(/\x1B\[[0-9;]*m/g, '').length;
 const padAnsi = (s: string, n: number) => s + ' '.repeat(Math.max(0, n - visLen(s)));
 

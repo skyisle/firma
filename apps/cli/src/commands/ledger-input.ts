@@ -25,9 +25,6 @@ const parseAmount = (val: string): number | undefined => {
 const fmtAmount = (n: number) =>
   n === 0 ? pc.dim('0') : pc.cyan(n.toLocaleString('en-US'));
 
-// Groups categories by subType and prompts for each amount.
-// existingMap: category → current amount (from previous save)
-// autoFillMap: category → pre-calculated amount (read-only)
 export const inputCategoryGroup = async (
   categories: CategoryDef[],
   existingMap: Map<string, number>,

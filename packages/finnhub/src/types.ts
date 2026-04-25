@@ -41,8 +41,6 @@ export type StockData = {
   marketCap: number;
 };
 
-// ── Company News ──────────────────────────────────────────────────────────────
-
 export type NewsItem = {
   id: number;
   category: string;
@@ -54,8 +52,6 @@ export type NewsItem = {
   summary: string;
   url: string;
 };
-
-// ── Insider Transactions ──────────────────────────────────────────────────────
 
 export type InsiderTransaction = {
   name: string;
@@ -72,8 +68,6 @@ export type InsiderTransactionsResponse = {
   symbol: string;
 };
 
-// ── Earnings Calendar ─────────────────────────────────────────────────────────
-
 export type EarningsItem = {
   date: string;
   epsActual: number | null;
@@ -89,8 +83,6 @@ export type EarningsItem = {
 export type EarningsCalendarResponse = {
   earningsCalendar: EarningsItem[];
 };
-
-// ── Financials Reported ───────────────────────────────────────────────────────
 
 export type FinancialLineItem = {
   concept: string;

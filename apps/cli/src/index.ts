@@ -35,7 +35,6 @@ const handleFatalError = (err: unknown) => {
 process.on('unhandledRejection', handleFatalError);
 process.on('uncaughtException', handleFatalError);
 
-// Commands that don't require authentication
 const UNGUARDED = new Set(['login', 'logout', 'whoami', 'set', 'get', 'install']);
 
 const program = new Command();
@@ -57,8 +56,6 @@ program
   .name('firma')
   .description('Personal asset tracker for overseas investors')
   .version('0.1.0');
-
-// ── auth ─────────────────────────────────────────────────────────────────────
 
 const auth = program.command('auth').description('Manage authentication');
 
@@ -88,8 +85,6 @@ auth
     logoutCommand();
     outro('Done');
   });
-
-// ── config ────────────────────────────────────────────────────────────────────
 
 const config = program.command('config').description('Manage local configuration');
 
@@ -126,8 +121,6 @@ config
       ].join('\n'));
     }
   });
-
-// ── data ──────────────────────────────────────────────────────────────────────
 
 program
   .command('sync')
@@ -215,8 +208,6 @@ program
     if (!opts.json) outro('Done');
   });
 
-// ── market data ───────────────────────────────────────────────────────────────
-
 program
   .command('news <ticker>')
   .description('Latest company news from Finnhub')
@@ -262,8 +253,6 @@ program
     await earningsCommand(ticker, { json: opts.json ?? false, weeks: Number(opts.weeks) });
     if (!opts.json) outro('Done');
   });
-
-// ── mcp ───────────────────────────────────────────────────────────────────────
 
 const mcp = program.command('mcp').description('Manage MCP server integration');
 

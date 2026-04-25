@@ -17,7 +17,6 @@ const server = new McpServer({
   version: '0.1.0',
 });
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 const ok = (data: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
@@ -28,7 +27,6 @@ const err = (msg: string) => ({
   isError: true,
 });
 
-// ── Read tools ────────────────────────────────────────────────────────────────
 
 server.tool(
   'get_portfolio',
@@ -127,7 +125,6 @@ server.tool(
   },
 );
 
-// ── Write tools ───────────────────────────────────────────────────────────────
 
 server.tool(
   'add_transaction',
@@ -242,7 +239,6 @@ server.tool(
   },
 );
 
-// ── Market data tools ─────────────────────────────────────────────────────────
 
 server.tool(
   'get_news',
@@ -288,7 +284,6 @@ server.tool(
   },
 );
 
-// Extracts key financial metrics from a raw Finnhub FinancialPeriod
 const findConcept = (items: FinancialLineItem[], ...concepts: string[]): number | null => {
   for (const concept of concepts) {
     const hit = items.find(i => i.concept === concept);
@@ -372,7 +367,6 @@ server.tool(
         return ok((res.earningsCalendar ?? []).sort((a, b) => b.date.localeCompare(a.date)));
       }
 
-      // All holdings: get active tickers from DB
       const db   = getDb();
       const txns = db.select().from(transactions).all();
       const net  = new Map<string, number>();
@@ -399,7 +393,6 @@ server.tool(
   },
 );
 
-// ── Start ─────────────────────────────────────────────────────────────────────
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

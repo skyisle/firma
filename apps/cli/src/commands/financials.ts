@@ -4,7 +4,6 @@ import { createFinnhubClient } from '@firma/finnhub';
 import type { FinancialLineItem, FinancialPeriod } from '@firma/finnhub';
 import { readConfig } from '../config.ts';
 
-// Find the first matching concept value in a statement array
 const find = (items: FinancialLineItem[], ...concepts: string[]): number | null => {
   for (const concept of concepts) {
     const hit = items.find(i => i.concept === concept);

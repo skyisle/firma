@@ -17,13 +17,11 @@ const getClaudeConfigPath = (): string | null => {
 };
 
 const getMcpBinPath = (): string | null => {
-  // 1. Check PATH
   try {
     const p = execSync('which firma-mcp', { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim();
     if (p) return p;
   } catch { /* not in PATH */ }
 
-  // 2. Same bin dir as the running `firma` binary (works for global npm installs)
   const firmaBin = process.argv[1];
   if (firmaBin) {
     const candidate = join(firmaBin, '..', 'firma-mcp');

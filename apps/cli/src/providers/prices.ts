@@ -8,6 +8,5 @@ export type PriceProvider = {
   getStockDataBatch(tickers: string[]): Promise<StockData[]>;
 };
 
-// Factory — swap out the implementation here when Finnhub is unavailable
 export const createPriceProvider = (apiKey: string): PriceProvider =>
   createFinnhubClient(apiKey);

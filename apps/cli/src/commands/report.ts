@@ -7,8 +7,6 @@ import type { BalanceEntry, FlowEntry } from '@firma/db';
 type BalancePeriod = { period: string; assets: number; liabilities: number; netWorth: number };
 type FlowPeriod    = { period: string; income: number; expenses: number; netFlow: number };
 
-// ── Currency ─────────────────────────────────────────────────────────────────
-
 export type Currency = 'KRW' | 'USD' | 'EUR' | 'JPY' | 'CNY' | 'GBP';
 
 const CURRENCY_SYMBOL: Record<Currency, string> = {
@@ -23,7 +21,6 @@ const fmtAmount = (amountKrw: number, currency: Currency, rate: number): string 
   return `${sym}${v.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 };
 
-// ── Formatters ────────────────────────────────────────────────────────────────
 
 const man = (n: number) => `₩${Math.round(n / 10000).toLocaleString('ko-KR')}만`;
 const delta = (n: number, fmt: (v: number) => string) => {
@@ -32,8 +29,6 @@ const delta = (n: number, fmt: (v: number) => string) => {
   return n >= 0 ? pc.green(s) : pc.red(s);
 };
 const colorNet = (n: number, s: string) => n >= 0 ? pc.green(s) : pc.red(s);
-
-// ── Bar charts ────────────────────────────────────────────────────────────────
 
 const BAR_W = 22;
 const EIGHTHS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
@@ -60,7 +55,6 @@ const savingsBar = (income: number, expenses: number): string => {
   return pc.red('█'.repeat(expFill)) + pc.green('█'.repeat(BAR_W - expFill));
 };
 
-// ── Labels ────────────────────────────────────────────────────────────────────
 
 const FLOW_LABEL: Record<string, string> = {
   salary: 'Salary', business: 'Business', dividends: 'Dividends',
@@ -75,7 +69,6 @@ const BALANCE_LABEL: Record<string, string> = {
   short_term: 'Short-term Liab.', long_term: 'Long-term Liab.',
 };
 
-// ── Aggregation ───────────────────────────────────────────────────────────────
 
 const aggregateBalance = (entries: BalanceEntry[]): BalancePeriod[] => {
   const map = new Map<string, { assets: number; liabilities: number }>();
@@ -103,7 +96,6 @@ const aggregateFlow = (entries: FlowEntry[]): FlowPeriod[] => {
     .map(([period, v]) => ({ period, ...v, netFlow: v.income - v.expenses }));
 };
 
-// ── Breakdown helpers ─────────────────────────────────────────────────────────
 
 const BREAKDOWN_BAR_W = 16;
 
@@ -127,7 +119,6 @@ const renderGroupRows = (
       return `  ${pc.dim(label)}  ${breakdownBar(amt / total, color)}  ${fmt(amt)}${pc.dim(pct)}`;
     });
 
-// ── Renderers ─────────────────────────────────────────────────────────────────
 
 const COL = { P: 10, N: 14, D: 12 };
 
@@ -228,8 +219,6 @@ const renderFlowBreakdown = (entries: FlowEntry[], year: string, fmt: (v: number
     pc.dim(`Savings  ${fmt(savings)}  (${savingsRate.toFixed(1)}%)`),
   ].join('\n');
 };
-
-// ── Command ───────────────────────────────────────────────────────────────────
 
 export const reportCommand = async (target?: string, currency: Currency = 'KRW', { json = false } = {}) => {
   const showBalance = !target || target === 'balance';

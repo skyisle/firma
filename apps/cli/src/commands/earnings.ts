@@ -8,7 +8,6 @@ import { getActiveTickers } from '../services/portfolio.ts';
 
 const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
 
-// Strips ANSI codes to get visible character length for column alignment
 const visLen = (s: string) => s.replace(/\x1B\[[0-9;]*m/g, '').length;
 const padAnsi = (s: string, n: number) => s + ' '.repeat(Math.max(0, n - visLen(s)));
 
@@ -24,7 +23,6 @@ const fmtEps = (n: number | null): string =>
 
 const HOUR_LABEL: Record<string, string> = { bmo: 'BMO', amc: 'AMC', dmh: 'Intra' };
 
-// Beat (▲) / miss (▼) colored suffix — goes on the last column
 const beatMiss = (actual: number | null, estimate: number | null): string => {
   if (actual == null || estimate == null || estimate === 0) return '';
   const beat = actual >= estimate;
@@ -57,7 +55,6 @@ const renderTable = (items: EarningsItem[], title: string) => {
     const epsEst   = fmtEps(item.epsEstimate).padEnd(COL.EPS_E);
     const epsAct   = padAnsi(fmtEps(item.epsActual), COL.EPS_A);
     const revEst   = fmtBig(item.revenueEstimate).padEnd(COL.REV_E);
-    // Last column: colored beat/miss suffix, no padEnd needed
     const revAct   = fmtBig(item.revenueActual) + beatMiss(item.revenueActual, item.revenueEstimate);
 
     return [

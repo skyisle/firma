@@ -13,7 +13,7 @@ export const createTransactionRepository = (db: Db): TransactionRepository => ({
     ticker
       ? db.select().from(transactions).where(eq(transactions.ticker, ticker.toUpperCase())).orderBy(asc(transactions.date)).all()
       : db.select().from(transactions).orderBy(asc(transactions.date)).all(),
-  insert: (txn: NewTransaction) => void db.insert(transactions).values(txn).run(),
+  insert: (txn: NewTransaction) => db.insert(transactions).values(txn).run(),
 });
 
 export const createPriceRepository = (db: Db): PriceRepository => ({
@@ -30,7 +30,7 @@ export const createBalanceRepository = (db: Db): BalanceRepository => ({
   getByPeriod: (period: string) =>
     db.select().from(balanceEntries).where(eq(balanceEntries.period, period)).all(),
   upsert: (entry: NewBalanceEntry) =>
-    void db.insert(balanceEntries).values(entry).onConflictDoUpdate({
+    db.insert(balanceEntries).values(entry).onConflictDoUpdate({
       target: [balanceEntries.period, balanceEntries.type, balanceEntries.sub_type, balanceEntries.category],
       set: { amount: entry.amount, date: entry.date, memo: entry.memo },
     }).run(),
@@ -41,7 +41,7 @@ export const createFlowRepository = (db: Db): FlowRepository => ({
   getByPeriod: (period: string) =>
     db.select().from(flowEntries).where(eq(flowEntries.period, period)).all(),
   upsert: (entry: NewFlowEntry) =>
-    void db.insert(flowEntries).values(entry).onConflictDoUpdate({
+    db.insert(flowEntries).values(entry).onConflictDoUpdate({
       target: [flowEntries.period, flowEntries.type, flowEntries.sub_type, flowEntries.category],
       set: { amount: entry.amount, date: entry.date, memo: entry.memo },
     }).run(),
