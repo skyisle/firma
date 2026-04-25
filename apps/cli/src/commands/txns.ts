@@ -1,17 +1,7 @@
 import { log, note } from '@clack/prompts';
 import pc from 'picocolors';
-import { apiFetch } from '../api.ts';
-import { requireAuth } from '../auth-guard.ts';
-
-type Txn = {
-  id: string;
-  ticker: string;
-  type: string;
-  shares: number;
-  price: number;
-  currency: string;
-  date: string;
-};
+import { getDb, transactions } from '../db/index.ts';
+import { eq, asc } from 'drizzle-orm';
 
 const TYPE_COLOR: Record<string, (s: string) => string> = {
   buy:      pc.green,
@@ -28,13 +18,22 @@ const fmt = {
 
 const COL = { DATE: 12, TICKER: 8, TYPE: 10, SHARES: 10, PRICE: 12, TOTAL: 14, AVG: 14 };
 
-export const txnsCommand = async (ticker?: string) => {
-  const { token } = requireAuth();
-  const qs = ticker ? `?ticker=${encodeURIComponent(ticker.toUpperCase())}` : '';
-  const txns = await apiFetch<Txn[]>(`/api/transactions${qs}`, { token });
+export const txnsCommand = async (ticker?: string, { json = false } = {}) => {
+  const db = getDb();
+  const all = ticker
+    ? db.select().from(transactions).where(eq(transactions.ticker, ticker.toUpperCase())).orderBy(asc(transactions.date)).all()
+    : db.select().from(transactions).orderBy(asc(transactions.date)).all();
+
+  const txns = [...all].reverse();
 
   if (txns.length === 0) {
+    if (json) { process.stdout.write('[]\n'); return; }
     log.warn(ticker ? `No transactions found for ${ticker.toUpperCase()}.` : 'No transactions found.');
+    return;
+  }
+
+  if (json) {
+    process.stdout.write(JSON.stringify(txns, null, 2) + '\n');
     return;
   }
 
@@ -54,37 +53,26 @@ export const txnsCommand = async (ticker?: string) => {
   const totalWidth = COL.DATE + (showTicker ? COL.TICKER + 2 : 0) + COL.TYPE + COL.SHARES + COL.PRICE + COL.TOTAL + (showAvg ? COL.AVG + 2 : 0) + 8;
   const divider = pc.dim('─'.repeat(totalWidth));
 
-  // compute running avg oldest→newest, then reverse for display
   const ordered = showAvg ? [...txns].reverse() : txns;
-
-  let shares = 0;
-  let costShares = 0;
-  let totalCost = 0;
+  let shares = 0, costShares = 0, totalCost = 0;
 
   const rowsAsc = ordered.map(t => {
     const colorType = TYPE_COLOR[t.type] ?? ((s: string) => s);
     const total = t.shares * t.price;
 
     if (t.type === 'buy') {
-      shares += t.shares;
-      costShares += t.shares;
-      totalCost += total;
+      shares += t.shares; costShares += t.shares; totalCost += total;
     } else if (t.type === 'sell') {
-      const prev = shares;
-      shares -= t.shares;
+      const prev = shares; shares -= t.shares;
       costShares = prev > 0 ? costShares * (shares / prev) : 0;
       totalCost = costShares > 0 ? costShares * (totalCost / costShares) : 0;
     } else if (t.type === 'deposit' && t.price > 0) {
-      shares += t.shares;
-      costShares += t.shares;
-      totalCost += t.shares * t.price;
+      shares += t.shares; costShares += t.shares; totalCost += t.shares * t.price;
     } else if (t.type === 'deposit') {
       shares += t.shares;
-      // price=0: excluded from avg
     }
 
     const avg = costShares > 0 ? totalCost / costShares : 0;
-
     return [
       pc.dim(t.date.padEnd(COL.DATE)),
       ...(showTicker ? [pc.bold(t.ticker.padEnd(COL.TICKER))] : []),
@@ -97,7 +85,6 @@ export const txnsCommand = async (ticker?: string) => {
   });
 
   const rows = showAvg ? rowsAsc.reverse() : rowsAsc;
-
   const title = ticker ? `Transactions · ${ticker.toUpperCase()}` : 'Transactions';
   const footer = `\n${pc.dim(`${txns.length} transaction${txns.length !== 1 ? 's' : ''}`)}`;
   note(`${header}\n${divider}\n${rows.join('\n')}${footer}`, title);

@@ -6,6 +6,7 @@ import { writeConfig, readConfig } from '../../config.ts';
 
 const SUPABASE_URL = 'https://kahzxbqbelpcndbmpste.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_BLIyEcZMGfT1t9JQevnvVA_Je5Q1Mmy';
+
 const CALLBACK_PORT = 54321;
 const CALLBACK_URL = `http://localhost:${CALLBACK_PORT}/callback`;
 
@@ -61,8 +62,9 @@ export const loginCommand = async () => {
     if (sessionError || !sessionData.session) throw sessionError ?? new Error('No session');
 
     const { session, user } = sessionData;
+    const existing = readConfig() ?? {};
     writeConfig({
-      server_url: readConfig()?.server_url ?? 'http://localhost:3000',
+      ...existing,
       access_token: session.access_token,
       refresh_token: session.refresh_token,
       user: { id: user.id, email: user.email! },

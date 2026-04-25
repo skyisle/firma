@@ -1,7 +1,7 @@
 import { cancel, isCancel, log, select, spinner, text } from '@clack/prompts';
 import pc from 'picocolors';
-import { apiFetch } from '../api.ts';
-import { requireAuth } from '../auth-guard.ts';
+import { getRepository } from '../db/index.ts';
+import { getActiveTickers } from '../services/portfolio.ts';
 
 const parsePositiveFloat = (val: string) => {
   const n = parseFloat(val);
@@ -19,29 +19,13 @@ const validatePositiveNumber = (label: string) => (val: string) => {
 };
 
 const guard = <T>(value: T | symbol): T => {
-  if (isCancel(value)) {
-    cancel('Cancelled');
-    process.exit(0);
-  }
+  if (isCancel(value)) { cancel('Cancelled'); process.exit(0); }
   return value as T;
 };
 
-const resolveCurrentPrice = async (ticker: string, token: string): Promise<number | null> => {
-  const s = spinner();
-  s.start('Fetching current price...');
-  try {
-    const { currentPrice } = await apiFetch<{ currentPrice: number }>(`/api/prices/${ticker}`, { token });
-    s.stop(`Current price: $${currentPrice.toFixed(2)}`);
-    return currentPrice;
-  } catch {
-    s.stop('Could not fetch price (enter manually)');
-    return null;
-  }
-};
-
-const selectTicker = async (token: string): Promise<string> => {
-  const holdings = await apiFetch<Array<{ ticker: string }>>('/api/portfolio', { token });
-  const activeTickers = holdings.map(h => h.ticker);
+const selectTicker = async (): Promise<string> => {
+  const repo = getRepository();
+  const activeTickers = getActiveTickers(repo.transactions.getAll());
 
   if (activeTickers.length === 0) {
     return (guard(await text({ message: 'Ticker', placeholder: 'TSLA', validate: validateTicker })) as string)
@@ -61,24 +45,25 @@ const selectTicker = async (token: string): Promise<string> => {
 };
 
 export const addCommand = async () => {
-  const { token } = requireAuth();
+  const ticker = await selectTicker();
 
-  const ticker = await selectTicker(token);
-  const currentPrice = await resolveCurrentPrice(ticker, token);
+  const repo = getRepository();
+  const priceRow = repo.prices.getAll().find(p => p.ticker === ticker);
+
+  const s = spinner();
+  s.start('Looking up cached price...');
+  const currentPrice = priceRow?.current_price ?? null;
+  s.stop(currentPrice ? `Current price: $${currentPrice.toFixed(2)}` : 'No cached price (run `firma sync` first, or enter manually)');
+
   const priceHint = currentPrice ? pc.dim(` (current $${currentPrice.toFixed(2)})`) : '';
 
   const type = guard(await select({
     message: 'Type',
-    options: [
-      { value: 'buy', label: 'Buy' },
-      { value: 'sell', label: 'Sell' },
-    ],
+    options: [{ value: 'buy', label: 'Buy' }, { value: 'sell', label: 'Sell' }],
   })) as 'buy' | 'sell';
 
   const sharesInput = guard(await text({
-    message: 'Shares',
-    placeholder: '10',
-    validate: validatePositiveNumber('Shares'),
+    message: 'Shares', placeholder: '10', validate: validatePositiveNumber('Shares'),
   })) as string;
 
   const priceInput = guard(await text({
@@ -88,22 +73,15 @@ export const addCommand = async () => {
   })) as string;
 
   const today = new Date().toISOString().split('T')[0];
-  const dateInput = guard(await text({
-    message: 'Date',
-    initialValue: today,
-  })) as string;
+  const dateInput = guard(await text({ message: 'Date', initialValue: today })) as string;
 
-  await apiFetch('/api/transactions', {
-    method: 'POST',
-    token,
-    body: {
-      ticker,
-      type,
-      shares: parsePositiveFloat(sharesInput)!,
-      price: parsePositiveFloat(priceInput)!,
-      currency: 'USD',
-      date: dateInput.trim() || today,
-    },
+  repo.transactions.insert({
+    ticker,
+    type,
+    shares: parsePositiveFloat(sharesInput)!,
+    price: parsePositiveFloat(priceInput)!,
+    currency: 'USD',
+    date: dateInput.trim() || today,
   });
 
   const typeLabel = type === 'buy' ? pc.green('Buy') : pc.red('Sell');

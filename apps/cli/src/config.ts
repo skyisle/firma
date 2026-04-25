@@ -6,10 +6,12 @@ const CONFIG_DIR = join(homedir(), '.firma');
 const CONFIG_PATH = join(CONFIG_DIR, 'config.json');
 
 type Config = {
-  access_token: string;
-  refresh_token: string;
-  user: { id: string; email: string };
-  server_url: string;
+  access_token?: string;
+  refresh_token?: string;
+  user?: { id: string; email: string };
+  server_url?: string;
+  finnhub_api_key?: string;
+  db_path?: string;
 };
 
 export const readConfig = (): Config | null => {
@@ -23,6 +25,11 @@ export const readConfig = (): Config | null => {
 export const writeConfig = (config: Config): void => {
   mkdirSync(CONFIG_DIR, { recursive: true });
   writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+};
+
+export const setConfigValue = (key: keyof Config, value: string): void => {
+  const config = readConfig() ?? {};
+  writeConfig({ ...config, [key]: value });
 };
 
 export const clearConfig = (): void => {

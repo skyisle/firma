@@ -1,0 +1,6 @@
+{
+  "buildCommand": "yarn workspace @firma/server build",
+  "outputDirectory": "apps/server/.next",
+  "installCommand": "corepack yarn install",
+  "framework": "nextjs"
+}

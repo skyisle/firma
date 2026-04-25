@@ -1,26 +1,34 @@
 {
-  "name": "@firma/cli",
-  "version": "0.1.0",
+  "name": "firma-app",
+  "version": "0.1.2",
   "type": "module",
+  "description": "CLI personal asset tracker for overseas investors",
   "bin": {
-    "firma": "./dist/index.js"
+    "firma": "./dist/index.js",
+    "firma-mcp": "./dist/mcp.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "tsx src/index.ts",
-    "build": "tsup src/index.ts --format esm --minify",
+    "build": "tsup src/index.ts --format esm --minify --no-splitting && yarn workspace @firma/mcp build && cp ../mcp/dist/index.js dist/mcp.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@clack/prompts": "^0.9.1",
-    "@firma/utils": "workspace:*",
     "@supabase/supabase-js": "^2.104.1",
+    "better-sqlite3": "^12.9.0",
     "commander": "^13.1.0",
-    "csv-parse": "^6.2.1",
+    "drizzle-orm": "^0.45.2",
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
+    "@firma/db": "workspace:*",
+    "@firma/finnhub": "workspace:*",
+    "@firma/utils": "workspace:*",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.15.3",
-    "drizzle-kit": "^0.31.10",
     "tsup": "^8.4.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3"

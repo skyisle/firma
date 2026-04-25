@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:cli": "yarn workspace @firma/cli dev",
+    "dev:cli": "yarn workspace firma-app dev",
     "dev:server": "yarn workspace @firma/server dev",
     "typecheck": "turbo typecheck",
     "build": "turbo build"

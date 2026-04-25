@@ -1,20 +1,7 @@
 import { log, note } from '@clack/prompts';
 import pc from 'picocolors';
-import { apiFetch } from '../api.ts';
-import { requireAuth } from '../auth-guard.ts';
-
-type PortfolioItem = {
-  ticker: string;
-  shares: number;
-  avgPrice: number;
-  currentPrice: number | null;
-  marketValue: number | null;
-  costBasis: number;
-  pnl: number | null;
-  pnlPct: number | null;
-  name: string | null;
-  syncedAt: string | null;
-};
+import { getRepository } from '../db/index.ts';
+import { aggregateHoldings } from '../services/portfolio.ts';
 
 const fmt = {
   usd: (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
@@ -23,11 +10,40 @@ const fmt = {
 };
 
 const colorPnl = (n: number, text: string) => n >= 0 ? pc.green(text) : pc.red(text);
-
-
 const COL = { TICKER: 8, SHARES: 8, AVG: 12, PRICE: 12, PNL: 22 };
 
-const renderTable = (items: PortfolioItem[]) => {
+export const portfolioCommand = async ({ json = false } = {}) => {
+  const repo = getRepository();
+  const holdings = aggregateHoldings(repo.transactions.getAll());
+
+  if (holdings.size === 0) {
+    if (json) { process.stdout.write('[]\n'); return; }
+    log.warn('No transactions found. Run `firma add` to add your first trade.');
+    return;
+  }
+
+  const tickers = [...holdings.keys()];
+  const priceMap = new Map(repo.prices.getAll().map(p => [p.ticker, p]));
+
+  if (json) {
+    const data = tickers.map(ticker => {
+      const h = holdings.get(ticker)!;
+      const p = priceMap.get(ticker);
+      const avgPrice = h.costShares > 0 ? h.totalCost / h.costShares : null;
+      const costBasis = avgPrice != null ? avgPrice * h.costShares : 0;
+      const marketValue = p ? p.current_price * h.shares : null;
+      const pnl = marketValue != null ? marketValue - costBasis : null;
+      return {
+        ticker, shares: h.shares, avgPrice, costBasis,
+        currentPrice: p?.current_price ?? null, marketValue,
+        pnl, pnlPct: pnl != null && costBasis > 0 ? (pnl / costBasis) * 100 : null,
+        name: p?.name ?? null, syncedAt: p?.synced_at ?? null,
+      };
+    });
+    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    return;
+  }
+
   const header = [
     pc.dim('TICKER'.padEnd(COL.TICKER)),
     pc.dim('QTY'.padEnd(COL.SHARES)),
@@ -35,27 +51,39 @@ const renderTable = (items: PortfolioItem[]) => {
     pc.dim('PRICE'.padEnd(COL.PRICE)),
     pc.dim('P&L'),
   ].join('  ');
-
   const divider = pc.dim('─'.repeat(COL.TICKER + COL.SHARES + COL.AVG + COL.PRICE + COL.PNL + 8));
 
-  const rows = items.map(item => {
-    const pnlText = item.pnl != null && item.pnlPct != null
-      ? `${fmt.usd(item.pnl)} (${fmt.pct(item.pnlPct)})`
+  let totalCost = 0, totalValue = 0;
+  let lastSyncedAt: string | null = null;
+
+  const rows = tickers.map(ticker => {
+    const h = holdings.get(ticker)!;
+    const p = priceMap.get(ticker);
+    const avgPrice = h.costShares > 0 ? h.totalCost / h.costShares : null;
+    const costBasis = avgPrice != null ? avgPrice * h.costShares : 0;
+    const marketValue = p ? p.current_price * h.shares : null;
+    const pnl = marketValue != null ? marketValue - costBasis : null;
+    const pnlPct = pnl != null && costBasis > 0 ? (pnl / costBasis) * 100 : null;
+
+    totalCost += costBasis;
+    totalValue += marketValue ?? costBasis;
+    if (p?.synced_at && (!lastSyncedAt || p.synced_at > lastSyncedAt)) lastSyncedAt = p.synced_at;
+
+    const pnlText = pnl != null && pnlPct != null
+      ? `${fmt.usd(pnl)} (${fmt.pct(pnlPct)})`
       : pc.dim('─');
+
     return [
-      pc.bold(item.ticker.padEnd(COL.TICKER)),
-      fmt.shares(item.shares).padEnd(COL.SHARES),
-      (item.avgPrice != null ? fmt.usd(item.avgPrice) : pc.dim('─')).padEnd(COL.AVG),
-      (item.currentPrice != null ? fmt.usd(item.currentPrice) : pc.dim('─')).padEnd(COL.PRICE),
-      item.pnl != null ? colorPnl(item.pnl, pnlText) : pnlText,
+      pc.bold(ticker.padEnd(COL.TICKER)),
+      fmt.shares(h.shares).padEnd(COL.SHARES),
+      (avgPrice != null ? fmt.usd(avgPrice) : pc.dim('─')).padEnd(COL.AVG),
+      (p ? fmt.usd(p.current_price) : pc.dim('─')).padEnd(COL.PRICE),
+      pnl != null ? colorPnl(pnl, pnlText) : pnlText,
     ].join('  ');
   });
 
-  const totalCost = items.reduce((s, i) => s + (i.costBasis ?? 0), 0);
-  const totalValue = items.reduce((s, i) => s + (i.marketValue ?? i.costBasis ?? 0), 0);
   const totalPnl = totalValue - totalCost;
-  const totalPnlPct = (totalPnl / totalCost) * 100;
-
+  const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
   const LBL = 12;
   const summary = [
     `${pc.dim('Value'.padEnd(LBL))}${pc.bold(fmt.usd(totalValue))}`,
@@ -63,22 +91,9 @@ const renderTable = (items: PortfolioItem[]) => {
     `${pc.dim('P&L'.padEnd(LBL))}${colorPnl(totalPnl, `${fmt.usd(totalPnl)}  ${fmt.pct(totalPnlPct)}`)}`,
   ].join('\n');
 
-  const syncedAt = items.find(i => i.syncedAt)?.syncedAt;
-  const lastSynced = syncedAt
-    ? `\n${pc.dim('Synced'.padEnd(LBL) + new Date(syncedAt).toLocaleString('en-US'))}`
-    : '';
+  const lastSynced = lastSyncedAt
+    ? `\n${pc.dim('Synced'.padEnd(LBL) + new Date(lastSyncedAt).toLocaleString('en-US'))}`
+    : `\n${pc.dim('Not synced — run `firma sync`')}`;
 
   note(`${header}\n${divider}\n${rows.join('\n')}\n${divider}\n${summary}${lastSynced}`, 'Portfolio');
-};
-
-export const portfolioCommand = async () => {
-  const { token } = requireAuth();
-  const items = await apiFetch<PortfolioItem[]>('/api/portfolio', { token });
-
-  if (items.length === 0) {
-    log.warn('No transactions found. Run `firma add` to add your first trade.');
-    return;
-  }
-
-  renderTable(items);
 };

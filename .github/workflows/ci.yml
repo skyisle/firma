@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  smoke-test:
+    name: ${{ matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['20', '22']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # better-sqlite3 needs build tools on Ubuntu
+      - name: Install build tools (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y build-essential python3
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install
+
+      - name: Build CLI
+        run: yarn workspace firma-app build
+
+      - name: Pack tarball
+        run: npm pack
+        working-directory: apps/cli
+
+      - name: Install globally from tarball (Unix)
+        if: runner.os != 'Windows'
+        run: npm install -g apps/cli/firma-app-*.tgz
+
+      - name: Install globally from tarball (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tarball = Get-ChildItem apps/cli/firma-app-*.tgz | Select-Object -First 1
+          npm install -g $tarball.FullName
+
+      - name: firma --version
+        run: firma --version
+
+      - name: firma --help
+        run: firma --help
+
+      # Write a fake auth token so guarded commands pass the auth check
+      - name: Setup CI auth (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p ~/.firma
+          echo '{"access_token":"ci-token","user":{"id":"ci","email":"ci@test.com"}}' > ~/.firma/config.json
+
+      - name: Setup CI auth (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dir = "$env:USERPROFILE\.firma"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          '{"access_token":"ci-token","user":{"id":"ci","email":"ci@test.com"}}' | Out-File -FilePath "$dir\config.json" -Encoding utf8
+
+      - name: firma portfolio --json (empty DB)
+        run: firma portfolio --json
+
+      - name: firma txns --json (empty DB)
+        run: firma txns --json
+
+      - name: firma report --json (empty DB)
+        run: firma report --json
