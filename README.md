@@ -45,7 +45,14 @@ Claude:  March 2026 expenses were ₩4,230,000 — up 18% vs. March 2025.
 
 You:     I just bought 15 shares of AAPL at $211. Log it.
 Claude:  Done — AAPL 15 shares @ $211.00 recorded for 2026-04-25.
+
+You:     Give me a full overview of my finances with charts.
+Claude:  [renders live portfolio dashboard — holdings, net worth trend, asset mix, cash flow]
 ```
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/evan-moon/firma/main/assets/claude-demo.png" alt="Claude rendering a live portfolio dashboard" width="700" />
+</p>
 
 In the terminal:
 
