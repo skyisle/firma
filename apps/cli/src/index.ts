@@ -22,7 +22,7 @@ import { mcpInstallCommand } from './commands/mcp.ts';
 import { setConfigValue, readConfig } from './config.ts';
 import { checkForUpdate } from './services/update-check.ts';
 
-const CURRENT_VERSION = '0.4.0';
+const CURRENT_VERSION = '0.4.1';
 
 const jsonMode = process.argv.includes('--json');
 

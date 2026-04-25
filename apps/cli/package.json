@@ -1,6 +1,6 @@
 {
   "name": "firma-app",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "type": "module",
   "description": "Local-first, AI-native CLI asset tracker for overseas stock investors. Built-in MCP server for Claude Desktop.",
   "keywords": [
