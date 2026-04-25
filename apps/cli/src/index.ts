@@ -20,6 +20,9 @@ import { reportCommand, type Currency } from './commands/report.ts';
 
 import { mcpInstallCommand } from './commands/mcp.ts';
 import { setConfigValue, readConfig } from './config.ts';
+import { checkForUpdate } from './services/update-check.ts';
+
+const CURRENT_VERSION = '0.4.0';
 
 const jsonMode = process.argv.includes('--json');
 
@@ -38,12 +41,21 @@ process.on('uncaughtException', handleFatalError);
 
 const program = new Command();
 
+const notifyUpdate = async (updatePromise: Promise<string | null>) => {
+  const latest = await updatePromise;
+  if (latest) {
+    log.warn(pc.yellow(`Update available: ${CURRENT_VERSION} → ${latest}\nRun: npm install -g firma-app@latest`));
+  }
+};
+
 const wrap = <Args extends unknown[]>(
   label: string,
   fn: (...args: Args) => Promise<void> | void,
 ) => async (...args: Args) => {
+  const updatePromise = checkForUpdate(CURRENT_VERSION);
   intro(pc.bgCyan(pc.black(` ${label} `)));
   await fn(...args);
+  await notifyUpdate(updatePromise);
   outro('Done');
 };
 
@@ -52,16 +64,18 @@ const wrapMaybeJson = <Args extends unknown[]>(
   fn: (...args: Args) => Promise<void> | void,
   isJson: (...args: Args) => boolean,
 ) => async (...args: Args) => {
+  const updatePromise = checkForUpdate(CURRENT_VERSION);
   const json = isJson(...args);
   if (!json) intro(pc.bgCyan(pc.black(` ${label} `)));
   await fn(...args);
+  if (!json) await notifyUpdate(updatePromise);
   if (!json) outro('Done');
 };
 
 program
   .name('firma')
   .description('Personal asset tracker for overseas investors')
-  .version('0.4.0');
+  .version(CURRENT_VERSION);
 
 // ── add ────────────────────────────────────────────────
 const add = program.command('add').description('Record a new entry');
