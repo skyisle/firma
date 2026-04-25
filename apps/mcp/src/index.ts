@@ -98,6 +98,41 @@ server.tool(
 );
 
 server.tool(
+  'get_settle',
+  'Month-end settlement for a period: balance sheet + cash flow with computed totals (net_worth, net_flow). Defaults to the current month.',
+  { period: z.string().optional().describe('Period in YYYY-MM format (defaults to current month)') },
+  async ({ period }) => {
+    const db = getDb();
+    const targetPeriod = period ?? new Date().toISOString().slice(0, 7);
+
+    const balEntries = db.select().from(balanceEntries).where(eq(balanceEntries.period, targetPeriod)).all();
+    const flowEnts   = db.select().from(flowEntries).where(eq(flowEntries.period, targetPeriod)).all();
+
+    const sumBy = (entries: typeof balEntries | typeof flowEnts, type: string) =>
+      entries.filter(e => e.type === type).reduce((s, e) => s + e.amount, 0);
+
+    const total_assets      = sumBy(balEntries, 'asset');
+    const total_liabilities = sumBy(balEntries, 'liability');
+    const total_income      = sumBy(flowEnts, 'income');
+    const total_expenses    = sumBy(flowEnts, 'expense');
+
+    return ok({
+      period: targetPeriod,
+      balance: {
+        entries: balEntries,
+        total_assets, total_liabilities,
+        net_worth: total_assets - total_liabilities,
+      },
+      flow: {
+        entries: flowEnts,
+        total_income, total_expenses,
+        net_flow: total_income - total_expenses,
+      },
+    });
+  },
+);
+
+server.tool(
   'get_prices',
   'Get cached stock prices for all synced tickers',
   {},
