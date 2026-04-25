@@ -33,6 +33,10 @@ Track your portfolio, log trades, and analyze monthly cash flow — all from you
 
 ## In conversation with Claude
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/evan-moon/firma/main/assets/demo.gif" alt="firma CLI demo" width="700" />
+</p>
+
 ```
 You:     How is my portfolio doing?
 Claude:  Total market value is $147,509, up +$55,870 (+60.9%) from cost basis.
@@ -52,31 +56,6 @@ Claude:  [renders live portfolio dashboard — holdings, net worth trend, asset 
 <p align="center">
   <img src="https://raw.githubusercontent.com/evan-moon/firma/main/assets/claude-demo.png" alt="Claude rendering a live portfolio dashboard" width="700" />
 </p>
-
-In the terminal:
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/evan-moon/firma/main/assets/demo.gif" alt="firma CLI demo" width="700" />
-</p>
-
-```
-$ firma show portfolio
-
-◇  Synced 4 stocks
-│
-◇  Portfolio
-│
-│  TICKER    QTY     AVG          PRICE         P&L
-│  ─────────────────────────────────────────────────────────────
-│  TSLA      392     $244.97      $376.32       $51,487.44 (+53.62%)
-│  NVDA      156     $128.27      $208.29       $12,483.24 (+62.39%)
-│  AAPL      43      $185.12      $271.08        $3,696.44 (+46.44%)
-│  MSFT      18      $324.44      $424.64        $1,803.52 (+30.88%)
-│  ─────────────────────────────────────────────────────────────
-│  Value       $199,310.64
-│  Cost        $129,840.00
-│  P&L         +$69,470.64  (+53.50%)
-```
 
 ---
 
@@ -171,32 +150,9 @@ Available in Claude Desktop after `firma mcp install`. Same `add_*` / `show_*` /
 
 ---
 
-## Architecture
-
-```
-packages/
-  db/        @firma/db       Drizzle schema, types, repository interfaces, aggregateHoldings()
-  finnhub/   @firma/finnhub  Finnhub API client
-  utils/     @firma/utils    Shared constants and assert helper
-
-apps/
-  cli/                       Commander CLI (firma)
-    src/
-      providers/prices.ts    PriceProvider interface + factory (swap provider here)
-      services/sync.ts       syncPrices() — used by `firma sync` and `show portfolio`
-      services/fx.ts         fetchFxRates() with 60s cache
-      db/repositories.ts     SQLite DataRepository implementation
-      commands/              Thin UI layer — no business logic
-  mcp/                       MCP server (firma-mcp), bundled with the CLI binary
-```
-
-**Swap the price provider** → edit `createPriceProvider()` in `apps/cli/src/providers/prices.ts`.
-
-**Swap the storage layer** → implement `DataRepository` against your API and swap it into `getRepository()`.
-
----
-
 ## Development
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture overview and extension points.
 
 Requires Node.js 22+ and Yarn Berry.
 
