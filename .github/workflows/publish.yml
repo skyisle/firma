@@ -35,9 +35,7 @@ jobs:
         run: yarn workspace firma-app build
 
       - name: Publish
-        run: |
-          OIDC_TOKEN=$(curl -s \
-            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=npm" | jq -r '.value')
-          NODE_AUTH_TOKEN="$OIDC_TOKEN" npm publish --access public --provenance
+        run: npm publish --access public --provenance
         working-directory: apps/cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
