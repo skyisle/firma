@@ -24,12 +24,6 @@ const fmt = {
 
 const colorPnl = (n: number, text: string) => n >= 0 ? pc.green(text) : pc.red(text);
 
-// Korean/CJK chars occupy 2 columns in terminal
-const visualWidth = (str: string) =>
-  [...str].reduce((w, c) => w + ((c.codePointAt(0) ?? 0) > 0x2E7F ? 2 : 1), 0);
-
-const wpad = (str: string, target: number) =>
-  str + ' '.repeat(Math.max(0, target - visualWidth(str)));
 
 const COL = { TICKER: 8, SHARES: 8, AVG: 12, PRICE: 12, PNL: 22 };
 
@@ -62,19 +56,19 @@ const renderTable = (items: PortfolioItem[]) => {
   const totalPnl = totalValue - totalCost;
   const totalPnlPct = (totalPnl / totalCost) * 100;
 
-  const LBL = 10;
+  const LBL = 12;
   const summary = [
-    `${pc.dim(wpad('평가액', LBL))}${pc.bold(fmt.usd(totalValue))}`,
-    `${pc.dim(wpad('투자원금', LBL))}${fmt.usd(totalCost)}`,
-    `${pc.dim(wpad('손익', LBL))}${colorPnl(totalPnl, `${fmt.usd(totalPnl)}  ${fmt.pct(totalPnlPct)}`)}`,
+    `${pc.dim('Value'.padEnd(LBL))}${pc.bold(fmt.usd(totalValue))}`,
+    `${pc.dim('Cost'.padEnd(LBL))}${fmt.usd(totalCost)}`,
+    `${pc.dim('P&L'.padEnd(LBL))}${colorPnl(totalPnl, `${fmt.usd(totalPnl)}  ${fmt.pct(totalPnlPct)}`)}`,
   ].join('\n');
 
   const syncedAt = items.find(i => i.syncedAt)?.syncedAt;
   const lastSynced = syncedAt
-    ? `\n${pc.dim('sync  ' + new Date(syncedAt).toLocaleString('ko-KR'))}`
+    ? `\n${pc.dim('Synced'.padEnd(LBL) + new Date(syncedAt).toLocaleString('ko-KR'))}`
     : '';
 
-  note(`${header}\n${divider}\n${rows.join('\n')}\n${divider}\n${summary}${lastSynced}`, '포트폴리오');
+  note(`${header}\n${divider}\n${rows.join('\n')}\n${divider}\n${summary}${lastSynced}`, 'Portfolio');
 };
 
 export const portfolioCommand = async () => {
