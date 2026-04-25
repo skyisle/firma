@@ -16,6 +16,16 @@ packages/
   utils/     — @firma/utils    assert() helper (shared)
 ```
 
+## Development Rules
+
+**모든 기능은 CLI + MCP 동시 구현.**
+새 커맨드를 추가할 때는 반드시 대응하는 MCP 툴도 함께 작성한다.
+
+- CLI: `apps/cli/src/commands/<name>.ts` + `apps/cli/src/index.ts` 등록
+- MCP: `apps/mcp/src/index.ts` 에 `server.tool()` 추가
+- MCP 툴 이름 컨벤션: `get_*` (조회), `add_*` / `set_*` (쓰기)
+- 빌드 순서: `@firma/finnhub` → `@firma/mcp` → `firma-app`
+
 ## Key Design Decisions
 
 - **Transactions as source of truth** — holdings are derived via aggregation, no holdings table
