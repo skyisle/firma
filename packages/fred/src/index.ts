@@ -7,8 +7,14 @@ import {
 } from './macro.js';
 import type { MacroUnit, MacroIndicator, MacroResult } from './macro.js';
 
+import { assembleStressIndex, assembleRegime } from './signals.js';
+import type { StressIndex, StressComponent, Regime, RegimeSignal } from './signals.js';
+
 export { CORE_MACRO_INDICATORS, FX_BY_CURRENCY, assembleMacroSnapshot };
 export type { MacroUnit, MacroIndicator, MacroResult };
+
+export { assembleStressIndex, assembleRegime };
+export type { StressIndex, StressComponent, Regime, RegimeSignal };
 
 import type {
   FredObservation, FredSeries, FredSearchResult, FredSeriesData,

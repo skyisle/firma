@@ -19,6 +19,8 @@ import { showEarningsCommand } from './commands/earnings.ts';
 import { showDividendCommand } from './commands/dividend.ts';
 import { showConcentrationCommand } from './commands/concentration.ts';
 import { showMacroCommand } from './commands/macro.ts';
+import { showStressCommand } from './commands/stress.ts';
+import { showRegimeCommand } from './commands/regime.ts';
 import { briefCommand } from './commands/brief.ts';
 import { reportCommand } from './commands/report.ts';
 import { addSnapshotCommand, editSnapshotCommand, deleteSnapshotCommand, showSnapshotCommand } from './commands/snapshot.ts';
@@ -27,7 +29,7 @@ import { mcpInstallCommand } from './commands/mcp.ts';
 import { setConfigValue, readConfig } from './config.ts';
 import { checkForUpdate } from './services/update-check.ts';
 
-const CURRENT_VERSION = '0.7.0';
+const CURRENT_VERSION = '0.8.0';
 
 const jsonMode = process.argv.includes('--json');
 
@@ -225,6 +227,22 @@ show
   .option('--refresh', 'Force regenerate, bypass today\'s cache')
   .action(wrapMaybeJson('firma show macro',
     (opts: { json?: boolean; refresh?: boolean }) => showMacroCommand({ json: opts.json ?? false, refresh: opts.refresh ?? false }),
+    (opts) => opts.json ?? false));
+
+show
+  .command('stress')
+  .description('Economic Stress Index (0–100) from 5 FRED series — yield curves, VIX, financial stress, jobless claims')
+  .option('--json', 'Output as JSON')
+  .action(wrapMaybeJson('firma show stress',
+    (opts: { json?: boolean }) => showStressCommand({ json: opts.json ?? false }),
+    (opts) => opts.json ?? false));
+
+show
+  .command('regime')
+  .description('Macro regime bias (Risk-on / Mixed / Risk-off) from 5 FRED-based binary signals')
+  .option('--json', 'Output as JSON')
+  .action(wrapMaybeJson('firma show regime',
+    (opts: { json?: boolean }) => showRegimeCommand({ json: opts.json ?? false }),
     (opts) => opts.json ?? false));
 
 show

@@ -1,6 +1,6 @@
 import { log, note, spinner } from '@clack/prompts';
 import pc from 'picocolors';
-import { assembleBrief, readCachedBrief, type BriefData, type BriefMacro } from '../services/brief.ts';
+import { assembleBrief, readCachedBrief, type BriefData, type BriefMacro, type BriefSignals } from '../services/brief.ts';
 import { CURRENCY_SYMBOL, type Currency } from '../utils/index.ts';
 
 const fmtUsd = (n: number) => `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
@@ -8,9 +8,9 @@ const fmtPct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 const fmtSigned = (n: number, digits = 2) => `${n >= 0 ? '+' : ''}${n.toFixed(digits)}`;
 
 const renderMovers = (m: BriefData['movers']): string[] => {
-  const colTicker = 8, colPrice = 12, colChg = 10;
-  const row = (p: { ticker: string; change_percent: number; current_price: number }, color: (s: string) => string) =>
-    `  ${pc.bold(p.ticker.padEnd(colTicker))}${`$${p.current_price.toFixed(2)}`.padEnd(colPrice)}${color(fmtPct(p.change_percent).padStart(colChg))}`;
+  const colTicker = 8, colPrice = 12, colChg = 10, colWeight = 10;
+  const row = (p: BriefData['movers']['winners'][number], color: (s: string) => string) =>
+    `  ${pc.bold(p.ticker.padEnd(colTicker))}${`$${p.current_price.toFixed(2)}`.padEnd(colPrice)}${color(fmtPct(p.change_percent).padStart(colChg))}  ${pc.dim(`${p.weight_pct.toFixed(1)}%`.padStart(colWeight))}`;
 
   const lines: string[] = [];
   if (m.winners.length === 0 && m.losers.length === 0) return [pc.dim('  (no price movement data — run `firma sync`)')];
@@ -24,6 +24,11 @@ const renderMovers = (m: BriefData['movers']): string[] => {
     lines.push(...m.losers.map(p => row(p, pc.red)));
   }
   return lines;
+};
+
+const renderInsights = (insights: BriefData['insights']): string[] => {
+  if (insights.length === 0) return [pc.dim('  (no notable cross-references today)')];
+  return insights.map(i => `  ${pc.cyan('•')} ${i.text}`);
 };
 
 const renderNews = (news: BriefData['news'], limit = 8): string[] => {
@@ -99,6 +104,40 @@ const renderMacro = (macro: BriefMacro | null): string[] => {
   return rows;
 };
 
+const stressColor = (label: string | null) =>
+  label === 'Low' ? pc.green
+    : label === 'Moderate' ? pc.cyan
+    : label === 'Elevated' ? pc.yellow
+    : label === 'Severe' || label === 'Critical' ? pc.red
+    : pc.dim;
+
+const regimeColor = (bias: string | null) =>
+  bias === 'Risk-on bias' ? pc.green
+    : bias === 'Risk-off bias' ? pc.red
+    : bias === 'Mixed' ? pc.yellow
+    : pc.dim;
+
+const renderSignals = (signals: BriefSignals | null): string[] => {
+  if (!signals) return [pc.dim('  (FRED key not set — run `firma config set fred-key <key>`)')];
+
+  const { stress, regime } = signals;
+  const lines: string[] = [];
+
+  const stressStr = stress.total_score != null
+    ? `${stressColor(stress.label)(`${stress.total_score}/100 ${stress.label}`)}`
+    : pc.dim('─');
+
+  const known = regime.bullish_count + regime.bearish_count;
+  const regimeStr = regime.bias
+    ? `${regimeColor(regime.bias)(regime.bias)}  ${pc.dim(`(${regime.bullish_count}/${known})`)}`
+    : pc.dim('insufficient data');
+
+  lines.push(`  ${pc.dim('Stress'.padEnd(8))}${stressStr}`);
+  lines.push(`  ${pc.dim('Regime'.padEnd(8))}${regimeStr}`);
+  lines.push(pc.dim('  ※ heuristic — `firma show stress` / `show regime` for breakdown'));
+  return lines;
+};
+
 const renderEarnings = (items: BriefData['earnings_upcoming']): string[] => {
   if (items.length === 0) return [pc.dim('  (no earnings in next 14 days)')];
   return items.map(e => {
@@ -138,15 +177,32 @@ export const briefCommand = async ({ json = false, refresh = false }: { json?: b
     return;
   }
 
-  const { portfolio, movers, news, earnings_upcoming, macro } = data;
+  const { portfolio, movers, news, earnings_upcoming, macro, signals, insights } = data;
 
-  const summaryLine = `${pc.dim('Portfolio:')} ${pc.bold(fmtUsd(portfolio.total_value_usd))} ${pc.dim(`across ${portfolio.holdings_count} holding${portfolio.holdings_count === 1 ? '' : 's'}`)}`;
+  const dailyChangeColor = portfolio.daily_change_usd >= 0 ? pc.green : pc.red;
+  const dailySign = portfolio.daily_change_usd >= 0 ? '+' : '';
+  const totalPnlColor = portfolio.total_pnl_usd >= 0 ? pc.green : pc.red;
+  const totalPnlSign  = portfolio.total_pnl_usd >= 0 ? '+' : '';
+
+  const summaryLine = [
+    `${pc.dim('Portfolio:')} ${pc.bold(fmtUsd(portfolio.total_value_usd))} ${pc.dim(`across ${portfolio.holdings_count} holding${portfolio.holdings_count === 1 ? '' : 's'}`)}`,
+    `${pc.dim('Today:')}     ${dailyChangeColor(`${dailySign}${fmtUsd(portfolio.daily_change_usd)} (${fmtPct(portfolio.daily_change_pct)})`)}`,
+    portfolio.total_pnl_pct != null
+      ? `${pc.dim('All-time:')}  ${totalPnlColor(`${totalPnlSign}${fmtUsd(portfolio.total_pnl_usd)} (${fmtPct(portfolio.total_pnl_pct)})`)}`
+      : null,
+  ].filter(Boolean).join('\n');
 
   const body = [
     summaryLine,
     '',
+    pc.bold('INSIGHTS'),
+    ...renderInsights(insights),
+    '',
     pc.bold('MACRO TODAY'),
     ...renderMacro(macro),
+    '',
+    pc.bold('MACRO SIGNALS'),
+    ...renderSignals(signals),
     '',
     pc.bold('MOVERS (today)'),
     ...renderMovers(movers),

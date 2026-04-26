@@ -5,67 +5,19 @@ import { z } from 'zod';
 import { eq, asc, and, gte, lte } from 'drizzle-orm';
 import { createFinnhubClient } from '@firma/finnhub';
 import type { FinancialLineItem, FinancialPeriod } from '@firma/finnhub';
-import { createFredClient, assembleMacroSnapshot, FX_BY_CURRENCY } from '@firma/fred';
+import { createFredClient, assembleMacroSnapshot, assembleStressIndex, assembleRegime } from '@firma/fred';
+import { assembleBriefData } from '@firma/brief';
 import {
   getDb, getFinnhubKey, getFredKey,
   transactions, balanceEntries, flowEntries, prices, portfolioSnapshots,
   aggregateHoldings, getActiveTickers,
 } from './db.ts';
 
-type BriefMacroIndicator = {
-  id: string; label: string; series_id: string; units: 'percent' | 'level' | 'price'; invert?: boolean;
-  current: number | null; prior_1d: number | null;
-  latest_date: string | null; prior_date: string | null;
-};
-
-const assembleBriefMacro = async (homeCurrency: string, portfolioUsd: number) => {
-  const apiKey = getFredKey();
-  if (!apiKey) return null;
-
-  const client = createFredClient(apiKey);
-  const fx = FX_BY_CURRENCY[homeCurrency.toUpperCase()];
-  const inds: { id: string; label: string; series_id: string; units: 'percent' | 'level' | 'price'; invert?: boolean }[] = [
-    { id: 'vix',   label: 'VIX',                series_id: 'VIXCLS', units: 'level' },
-    { id: 'ust10', label: '10Y Treasury Yield', series_id: 'DGS10',  units: 'percent' },
-  ];
-  if (fx) inds.push(fx);
-
-  const fromDate = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
-  const indicators: BriefMacroIndicator[] = await Promise.all(inds.map(async (ind) => {
-    try {
-      const obs = await client.fetchObservations(ind.series_id, { from: fromDate });
-      const valid = obs.filter((o): o is { date: string; value: number } => o.value != null);
-      if (valid.length === 0) {
-        return { ...ind, current: null, prior_1d: null, latest_date: null, prior_date: null };
-      }
-      const apply = ind.invert ? (v: number) => 1 / v : (v: number) => v;
-      const latest = valid.at(-1)!;
-      const prior = valid.length > 1 ? valid[valid.length - 2] : null;
-      return {
-        ...ind,
-        current: apply(latest.value),
-        prior_1d: prior ? apply(prior.value) : null,
-        latest_date: latest.date,
-        prior_date: prior?.date ?? null,
-      };
-    } catch {
-      return { ...ind, current: null, prior_1d: null, latest_date: null, prior_date: null };
-    }
-  }));
-
-  const fxResult = indicators.find(r => r.id === 'fx');
-  const fx_impact_home = fxResult && fxResult.current != null && fxResult.prior_1d != null
-    ? portfolioUsd * (fxResult.current - fxResult.prior_1d)
-    : null;
-
-  return { home_currency: homeCurrency.toUpperCase(), indicators, fx_impact_home };
-};
-
 const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
 
 const server = new McpServer({
   name: 'firma',
-  version: '0.7.0',
+  version: '0.8.0',
 });
 
 
@@ -293,16 +245,13 @@ server.tool(
 
 server.tool(
   'get_brief',
-  'Daily portfolio brief: today\'s movers, news from last 24h, upcoming earnings (next 14d), and macro context (VIX, 10Y Treasury, plus FX vs home_currency with portfolio impact). Cached per day on disk; same-day calls return the cache. Pass refresh=true to bypass cache.',
+  'Daily portfolio brief — the richest single tool for daily check-ins. Returns: full holdings list with weights and per-position daily P&L; ticker/currency/sector/country concentration (HHI) with top contributors; today\'s movers tagged with portfolio weight; recent news with summaries; upcoming earnings tagged with portfolio weight; macro context (VIX, 10Y, FX with home-currency portfolio impact); macro signals (Stress 0-100, Regime bias from 5 signals); pre-computed insights array cross-referencing portfolio composition with macro state. Cached per day on disk.',
   {
     refresh: z.boolean().default(false).describe('Force regenerate, bypass today\'s cache'),
     home_currency: z.string().default('USD').describe('User\'s home currency for FX context (USD/KRW/EUR/JPY/CNY/GBP). USD = no FX line.'),
   },
   async ({ refresh, home_currency }) => {
     const today = new Date().toISOString().slice(0, 10);
-    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
-    const future = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
-
     const cacheDir = `${process.env.HOME ?? ''}/.firma/cache`;
     const cachePath = `${cacheDir}/brief-${today}.json`;
     const fs = await import('fs');
@@ -313,67 +262,13 @@ server.tool(
     }
 
     const db = getDb();
-    const txns = db.select().from(transactions).all();
-    const holdings = aggregateHoldings(txns);
-    const tickers = getActiveTickers(txns);
-    const priceMap = new Map(db.select().from(prices).all().map(p => [p.ticker, p]));
-
-    const positions = tickers.map(t => {
-      const h = holdings.get(t)!;
-      const p = priceMap.get(t);
-      return {
-        ticker: t,
-        current_price:  p?.current_price  ?? 0,
-        change_percent: p?.change_percent ?? 0,
-        market_value:   (p?.current_price ?? 0) * h.shares,
-      };
+    const data = await assembleBriefData({
+      transactions: db.select().from(transactions).all(),
+      prices:       db.select().from(prices).all(),
+      finnhubKey:   getFinnhubKey() ?? null,
+      fredKey:      getFredKey() ?? null,
+      homeCurrency: home_currency,
     });
-
-    const totalValue = positions.reduce((s, p) => s + p.market_value, 0);
-    const movables = positions.filter(p => p.current_price > 0);
-    const winners = [...movables].sort((a, b) => b.change_percent - a.change_percent).slice(0, 3)
-      .filter(p => p.change_percent > 0).map(({ ticker, change_percent, current_price }) => ({ ticker, change_percent, current_price }));
-    const losers  = [...movables].sort((a, b) => a.change_percent - b.change_percent).slice(0, 3)
-      .filter(p => p.change_percent < 0).map(({ ticker, change_percent, current_price }) => ({ ticker, change_percent, current_price }));
-
-    const apiKey = getFinnhubKey();
-    let news: Array<{ ticker: string; headline: string; source: string; published_at: number; url: string }> = [];
-    let earnings_upcoming: unknown[] = [];
-
-    if (apiKey && tickers.length > 0) {
-      const client = createFinnhubClient(apiKey);
-      const newsResults = await Promise.all(
-        tickers.map(t =>
-          client.getCompanyNews(t, yesterday, today)
-            .then(items => items.slice(0, 2).map(n => ({
-              ticker: t, headline: n.headline, source: n.source, published_at: n.datetime, url: n.url,
-            })))
-            .catch(() => [] as typeof news),
-        ),
-      );
-      news = newsResults.flat().sort((a, b) => b.published_at - a.published_at);
-
-      const earningsResults = await Promise.all(
-        tickers.map(t =>
-          client.getEarningsCalendar(today, future, t)
-            .then(r => r.earningsCalendar ?? [])
-            .catch(() => []),
-        ),
-      );
-      earnings_upcoming = earningsResults.flat().sort((a: { date: string }, b: { date: string }) => a.date.localeCompare(b.date));
-    }
-
-    const macro = await assembleBriefMacro(home_currency, totalValue);
-
-    const data = {
-      date: today,
-      generated_at: new Date().toISOString(),
-      portfolio: { total_value_usd: totalValue, holdings_count: holdings.size },
-      movers: { winners, losers },
-      news,
-      earnings_upcoming,
-      macro,
-    };
 
     fs.mkdirSync(cacheDir, { recursive: true });
     fs.writeFileSync(cachePath, JSON.stringify(data, null, 2));
@@ -1058,6 +953,38 @@ server.tool(
       });
     } catch (e) {
       return err(e instanceof Error ? e.message : 'Failed to fetch macro snapshot');
+    }
+  },
+);
+
+server.tool(
+  'show_stress',
+  'Economic Stress Index (0–100) computed from 5 FRED series — yield curve (T10Y2Y), bank spread (T10Y3M), volatility (VIXCLS), financial stress (STLFSI4), initial jobless claims (ICSA). Returns total score, label (Low/Moderate/Elevated/Severe/Critical), and per-component breakdown with weights and formulas. Pure descriptive, no advice.',
+  {},
+  async () => {
+    const apiKey = getFredKey();
+    if (!apiKey) return err('FRED API key not set. Run: firma config set fred-key <your-key>');
+    try {
+      const data = await assembleStressIndex(createFredClient(apiKey));
+      return ok({ generated_at: new Date().toISOString(), ...data });
+    } catch (e) {
+      return err(e instanceof Error ? e.message : 'Failed to compute stress index');
+    }
+  },
+);
+
+server.tool(
+  'show_regime',
+  'Macro regime bias (Risk-on bias / Mixed / Risk-off bias) from 5 FRED-based binary signals: VIX level, yield curve, HY credit spread, USD trend (30d), and breakeven inflation. Each signal evaluates to bullish/bearish; ≥70% bullish → risk-on, ≤40% → risk-off, otherwise mixed. Returns full signal breakdown — never present as advice.',
+  {},
+  async () => {
+    const apiKey = getFredKey();
+    if (!apiKey) return err('FRED API key not set. Run: firma config set fred-key <your-key>');
+    try {
+      const data = await assembleRegime(createFredClient(apiKey));
+      return ok({ generated_at: new Date().toISOString(), ...data });
+    } catch (e) {
+      return err(e instanceof Error ? e.message : 'Failed to compute regime');
     }
   },
 );

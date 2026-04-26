@@ -208,6 +208,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@firma/brief@workspace:*, @firma/brief@workspace:packages/brief":
+  version: 0.0.0-use.local
+  resolution: "@firma/brief@workspace:packages/brief"
+  dependencies:
+    "@firma/db": "workspace:*"
+    "@firma/finnhub": "workspace:*"
+    "@firma/fred": "workspace:*"
+    tsup: "npm:^8.4.0"
+    typescript: "npm:^5"
+  languageName: unknown
+  linkType: soft
+
 "@firma/db@workspace:*, @firma/db@workspace:packages/db":
   version: 0.0.0-use.local
   resolution: "@firma/db@workspace:packages/db"
@@ -238,6 +250,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@firma/mcp@workspace:apps/mcp"
   dependencies:
+    "@firma/brief": "workspace:*"
     "@firma/db": "workspace:*"
     "@firma/finnhub": "workspace:*"
     "@firma/fred": "workspace:*"
@@ -1313,6 +1326,7 @@ __metadata:
   resolution: "firma-app@workspace:apps/cli"
   dependencies:
     "@clack/prompts": "npm:^0.9.1"
+    "@firma/brief": "workspace:*"
     "@firma/db": "workspace:*"
     "@firma/finnhub": "workspace:*"
     "@firma/fred": "workspace:*"

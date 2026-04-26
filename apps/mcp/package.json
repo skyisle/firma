@@ -17,6 +17,7 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@firma/brief": "workspace:*",
     "@firma/db": "workspace:*",
     "@firma/finnhub": "workspace:*",
     "@firma/fred": "workspace:*",

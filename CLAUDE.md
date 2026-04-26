@@ -71,6 +71,8 @@ firma show snapshot [ticker]   # portfolio value history; --from/--to for date r
 firma show dividend            # estimated annual income + per-ticker yield
 firma show concentration       # HHI by ticker / currency / sector / country
 firma show macro               # FRED macro snapshot (8 indicators + dynamic FX)
+firma show stress              # Economic Stress Index (0-100) from 5 FRED series
+firma show regime              # Macro regime bias (Risk-on / Mixed / Risk-off) from 5 signals
 firma show news <ticker>
 firma show insider <ticker>
 firma show financials <ticker>
@@ -113,6 +115,8 @@ show_portfolio / show_txns / show_balance / show_flow / show_prices
 show_dividend / show_news / show_insider / show_financials / show_earnings
 show_concentration                  # HHI by dimension
 show_macro                          # curated FRED macro snapshot (8 indicators + FX)
+show_stress                         # Economic Stress Index (0-100, 5 FRED series weighted)
+show_regime                         # Macro regime bias (5 binary signals → Risk-on / Mixed / Risk-off)
 fetch_fred_series / search_fred_series  # raw FRED data layer
 get_brief                           # daily brief (cached per day)
 report_balance / report_flow / report_combined / report_settle

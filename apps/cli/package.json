@@ -1,6 +1,6 @@
 {
   "name": "firma-app",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "mcpName": "io.github.evan-moon/firma",
   "type": "module",
   "description": "Local-first, AI-native CLI asset tracker for overseas stock investors. Built-in MCP server for Claude Desktop.",
@@ -56,6 +56,7 @@
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
+    "@firma/brief": "workspace:*",
     "@firma/db": "workspace:*",
     "@firma/finnhub": "workspace:*",
     "@firma/fred": "workspace:*",
