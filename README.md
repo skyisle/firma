@@ -107,6 +107,28 @@ Claude calls `add_txn` for each row, then `sync_prices` + `sync_fx_rates`, then 
 
 ---
 
+## Sync & cache
+
+`firma sync` (or its MCP equivalent) pulls two things from the outside world, **scoped by the data you've already registered**:
+
+1. **Prices** (Finnhub) — fetches only the tickers with active holdings. Sell down to 0 and the ticker drops out of the next sync.
+2. **Historical FX rates** (FRED) — on first run, scans your transactions/balances/flow to find the earliest date you have data for, then backfills daily KRW/JPY/EUR/CNY/GBP per USD from that date through today (~5 FRED calls, ~10s). Subsequent runs are increment-only (sub-second).
+
+Stored in `~/.firma/firma.db` (`fx_rates` table). **Add data first, then sync** — running sync on an empty database does nothing because there's nothing to derive scope from.
+
+Why historical FX matters: when you display a 2018 balance in KRW, firma uses the 2018 rate (₩1,114.90/USD) instead of today's rate (₩1,461/USD). "What was my net worth in KRW in 2018?" finally returns the correct answer. Inspect the cache with `firma show fx` (coverage summary) or `firma show fx KRW` (recent rates).
+
+```bash
+firma sync         # prices + FX history (default)
+firma sync fx      # FX only (incremental refresh)
+firma show fx      # coverage summary across currencies
+firma show fx KRW  # latest 30 KRW/USD rates
+```
+
+The general rule: anything tagged with a date uses the historical rate. Anything representing "current value as of now" (Portfolio MV, brief MACRO TODAY, FX impact since yesterday) stays on live rates from `open.er-api.com`.
+
+---
+
 ## Privacy
 
 All financial data is stored in `~/.firma/firma.db` — a local SQLite file only you can access. Nothing is sent to Firma servers.
