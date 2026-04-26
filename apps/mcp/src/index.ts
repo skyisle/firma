@@ -15,7 +15,7 @@ const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
 
 const server = new McpServer({
   name: 'firma',
-  version: '0.3.0',
+  version: '0.5.0',
 });
 
 
@@ -191,6 +191,47 @@ server.tool(
 );
 
 server.tool(
+  'report_combined',
+  'Both balance sheet and cash flow trends in one call. Equivalent to calling report_balance and report_flow with the same limit.',
+  { limit: z.number().int().min(1).max(120).default(36).describe('Max number of periods per report (default: 36)') },
+  async ({ limit }) => {
+    const db = getDb();
+    const balRows = db.select().from(balanceEntries).all();
+    const flowRows = db.select().from(flowEntries).all();
+
+    const aggBal = [...balRows.reduce((map, { period, type, amount }) => {
+      const prev = map.get(period) ?? { assets: 0, liabilities: 0 };
+      return map.set(period, {
+        assets:      prev.assets      + (type === 'asset'     ? amount : 0),
+        liabilities: prev.liabilities + (type === 'liability' ? amount : 0),
+      });
+    }, new Map<string, { assets: number; liabilities: number }>()).entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-limit)
+      .map(([period, { assets, liabilities }]) => ({
+        period, assets, liabilities, net_worth: assets - liabilities,
+      }));
+
+    const aggFlow = [...flowRows.reduce((map, { period, type, amount }) => {
+      const prev = map.get(period) ?? { income: 0, expenses: 0 };
+      return map.set(period, {
+        income:   prev.income   + (type === 'income'  ? amount : 0),
+        expenses: prev.expenses + (type === 'expense' ? amount : 0),
+      });
+    }, new Map<string, { income: number; expenses: number }>()).entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-limit)
+      .map(([period, { income, expenses }]) => ({
+        period, income, expenses,
+        net_flow: income - expenses,
+        savings_rate: income > 0 ? ((income - expenses) / income) * 100 : null,
+      }));
+
+    return ok({ balance: aggBal, flow: aggFlow });
+  },
+);
+
+server.tool(
   'show_prices',
   'Get cached stock prices for all synced tickers',
   {},
@@ -303,6 +344,54 @@ server.tool(
         set: { amount, currency: 'USD', date, memo: memo ?? null },
       }).run();
     return ok({ period, type, sub_type, category, amount, currency: 'USD' });
+  },
+);
+
+server.tool(
+  'add_monthly',
+  'Batch upsert balance and flow entries for a single period in one call. Use for month-end settlement when both sheets are ready together. Each entry follows the same shape as add_balance / add_flow.',
+  {
+    period: z.string().describe('YYYY-MM'),
+    date:   z.string().describe('YYYY-MM-DD (typically month-end)'),
+    balance: z.array(z.object({
+      type:     z.enum(['asset', 'liability']),
+      sub_type: z.string(),
+      category: z.string(),
+      amount:   z.number().int(),
+      memo:     z.string().optional(),
+    })).default([]),
+    flow: z.array(z.object({
+      type:     z.enum(['income', 'expense']),
+      sub_type: z.string(),
+      category: z.string(),
+      amount:   z.number().int(),
+      memo:     z.string().optional(),
+    })).default([]),
+  },
+  async ({ period, date, balance, flow }) => {
+    const db = getDb();
+
+    for (const e of balance) {
+      db.insert(balanceEntries).values({
+        period, date, type: e.type, sub_type: e.sub_type, category: e.category,
+        amount: e.amount, currency: 'USD', memo: e.memo ?? null,
+      }).onConflictDoUpdate({
+        target: [balanceEntries.period, balanceEntries.type, balanceEntries.sub_type, balanceEntries.category],
+        set: { amount: e.amount, currency: 'USD', date, memo: e.memo ?? null },
+      }).run();
+    }
+
+    for (const e of flow) {
+      db.insert(flowEntries).values({
+        period, date, type: e.type, sub_type: e.sub_type, category: e.category,
+        amount: e.amount, currency: 'USD', memo: e.memo ?? null,
+      }).onConflictDoUpdate({
+        target: [flowEntries.period, flowEntries.type, flowEntries.sub_type, flowEntries.category],
+        set: { amount: e.amount, currency: 'USD', date, memo: e.memo ?? null },
+      }).run();
+    }
+
+    return ok({ period, balance_upserted: balance.length, flow_upserted: flow.length });
   },
 );
 

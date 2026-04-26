@@ -9,11 +9,12 @@ Turborepo monorepo with Yarn Berry (`nodeLinker: node-modules`):
 
 ```
 apps/
-  cli/       — @firma/cli      TypeScript CLI (Commander + Clack)
-  server/    — @firma/server   Next.js 16 API server (deployed on Vercel)
+  cli/       — firma-app       TypeScript CLI (Commander + Clack)
+  mcp/       — @firma/mcp      MCP server (shares ~/.firma/firma.db with CLI)
 packages/
+  db/        — @firma/db       Drizzle schema + repository contracts (shared)
   finnhub/   — @firma/finnhub  Finnhub API client (shared)
-  utils/     — @firma/utils    assert() helper (shared)
+  utils/     — @firma/utils    pure helpers + ledger category defs (shared)
 ```
 
 ## Development Rules
@@ -89,11 +90,12 @@ Same pattern: `add_*` / `show_*` / `report_*` (+ `edit_txn`, `delete_txn`, `sync
 ```
 add_txn / edit_txn / delete_txn
 add_balance / add_flow              # upsert: also acts as edit for same composite key
+add_monthly                         # batch upsert balance + flow for one period
 delete_balance / delete_flow        # period-level (or single entry by composite key)
 add_snapshot / edit_snapshot / delete_snapshot / show_snapshot
 show_portfolio / show_txns / show_balance / show_flow / show_prices
 show_dividend / show_news / show_insider / show_financials / show_earnings
-report_balance / report_flow / report_settle
+report_balance / report_flow / report_combined / report_settle
 sync_prices
 ```
 

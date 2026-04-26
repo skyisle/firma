@@ -21,12 +21,11 @@ import { reportCommand } from './commands/report.ts';
 import type { Currency } from './utils/index.ts';
 import { addSnapshotCommand, editSnapshotCommand, deleteSnapshotCommand, showSnapshotCommand } from './commands/snapshot.ts';
 
-import { migrateCommand } from './commands/migrate.ts';
 import { mcpInstallCommand } from './commands/mcp.ts';
 import { setConfigValue, readConfig, getDefaultCurrency } from './config.ts';
 import { checkForUpdate } from './services/update-check.ts';
 
-const CURRENT_VERSION = '0.4.1';
+const CURRENT_VERSION = '0.5.0';
 
 const jsonMode = process.argv.includes('--json');
 
@@ -287,11 +286,6 @@ program
   .action(wrapMaybeJson('firma sync',
     (opts: { json?: boolean }) => syncCommand({ json: opts.json ?? false }),
     (opts) => opts.json ?? false));
-
-program
-  .command('migrate')
-  .description('Convert legacy KRW balance/flow entries to USD using historical exchange rates')
-  .action(wrap('firma migrate', migrateCommand));
 
 // ── config ─────────────────────────────────────────────
 const config = program.command('config').description('Manage local configuration');
