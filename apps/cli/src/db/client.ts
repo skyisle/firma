@@ -4,9 +4,9 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { mkdirSync } from 'fs';
 import { readConfig } from '../config.ts';
-import { transactions, balanceEntries, flowEntries, prices, portfolioSnapshots } from '@firma/db';
+import { transactions, balanceEntries, flowEntries, prices, portfolioSnapshots, fxRates } from '@firma/db';
 
-const schema = { transactions, balanceEntries, flowEntries, prices, portfolioSnapshots };
+const schema = { transactions, balanceEntries, flowEntries, prices, portfolioSnapshots, fxRates };
 
 const getDbPath = () => readConfig()?.db_path ?? join(homedir(), '.firma', 'firma.db');
 
@@ -51,6 +51,12 @@ export const getDb = () => {
       shares REAL NOT NULL, avg_price REAL,
       current_price REAL NOT NULL, currency TEXT NOT NULL DEFAULT 'USD',
       UNIQUE (date, ticker)
+    );
+    CREATE TABLE IF NOT EXISTS fx_rates (
+      date TEXT NOT NULL,
+      currency TEXT NOT NULL,
+      rate_to_usd REAL NOT NULL,
+      PRIMARY KEY (date, currency)
     );
   `);
 

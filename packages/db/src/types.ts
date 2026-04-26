@@ -1,5 +1,5 @@
 import type { InferSelectModel, InferInsertModel } from 'drizzle-orm';
-import type { transactions, balanceEntries, flowEntries, prices, portfolioSnapshots } from './schema.ts';
+import type { transactions, balanceEntries, flowEntries, prices, portfolioSnapshots, fxRates } from './schema.ts';
 
 export type Transaction    = InferSelectModel<typeof transactions>;
 export type NewTransaction = InferInsertModel<typeof transactions>;
@@ -11,6 +11,8 @@ export type Price          = InferSelectModel<typeof prices>;
 export type NewPrice       = InferInsertModel<typeof prices>;
 export type Snapshot       = InferSelectModel<typeof portfolioSnapshots>;
 export type NewSnapshot    = InferInsertModel<typeof portfolioSnapshots>;
+export type FxRate         = InferSelectModel<typeof fxRates>;
+export type NewFxRate      = InferInsertModel<typeof fxRates>;
 
 export type Holding = {
   ticker: string;

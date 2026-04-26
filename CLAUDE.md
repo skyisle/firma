@@ -34,6 +34,7 @@ packages/
 - **Local SQLite** — all data stored in `~/.firma/firma.db` via better-sqlite3 + Drizzle ORM
 - **Finnhub** — stock price provider; API key stored in `~/.firma/config.json`
 - **FRED** — macro data provider (rates, yields, FX, inflation); API key stored in `~/.firma/config.json`
+- **Historical FX cache** — `fx_rates` table caches daily rates for KRW/JPY/EUR/CNY/GBP per USD. Backfilled from FRED on `firma sync` (or `firma sync fx`), starting from earliest user transaction/balance/flow date. Increment-only on subsequent runs. USD has no row (returns 1.0 in code).
 
 ## Build: MCP bundling
 
@@ -97,7 +98,8 @@ firma delete snapshot [date]       # deletes all holdings for that date
 
 # actions
 firma brief                   # daily brief: movers + news + earnings (cached per day)
-firma sync
+firma sync                    # prices (Finnhub) + FX history (FRED) — default
+firma sync fx                 # FX history only — increment-only backfill
 firma mcp install
 ```
 
@@ -118,6 +120,8 @@ show_macro                          # curated FRED macro snapshot (8 indicators 
 show_stress                         # Economic Stress Index (0-100, 5 FRED series weighted)
 show_regime                         # Macro regime bias (5 binary signals → Risk-on / Mixed / Risk-off)
 fetch_fred_series / search_fred_series  # raw FRED data layer
+sync_fx_rates                       # backfill historical FX rate cache (KRW/JPY/EUR/CNY/GBP per USD)
+get_fx_rate                         # lookup historical FX rate for a date
 get_brief                           # daily brief (cached per day)
 report_balance / report_flow / report_combined / report_settle
 sync_prices

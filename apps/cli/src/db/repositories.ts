@@ -1,8 +1,8 @@
-import { eq, asc, desc, and, gte, lte } from 'drizzle-orm';
-import { transactions, balanceEntries, flowEntries, prices, portfolioSnapshots } from '@firma/db';
+import { eq, asc, desc, and, gte, lte, sql } from 'drizzle-orm';
+import { transactions, balanceEntries, flowEntries, prices, portfolioSnapshots, fxRates } from '@firma/db';
 import type {
-  TransactionRepository, PriceRepository, BalanceRepository, FlowRepository, SnapshotRepository, DataRepository,
-  NewTransaction, NewPrice, NewBalanceEntry, NewFlowEntry, NewSnapshot,
+  TransactionRepository, PriceRepository, BalanceRepository, FlowRepository, SnapshotRepository, FxRepository, DataRepository,
+  NewTransaction, NewPrice, NewBalanceEntry, NewFlowEntry, NewSnapshot, NewFxRate,
 } from '@firma/db';
 import type { getDb } from './client.ts';
 
@@ -96,10 +96,52 @@ const createSnapshotRepository = (db: Db): SnapshotRepository => ({
     db.delete(portfolioSnapshots).where(eq(portfolioSnapshots.date, date)).run().changes,
 });
 
+const createFxRepository = (db: Db): FxRepository => ({
+  getRate: (date, currency) =>
+    db.select().from(fxRates)
+      .where(and(eq(fxRates.date, date), eq(fxRates.currency, currency)))
+      .get(),
+  getRateOnOrBefore: (date, currency, lookbackDays = 7) => {
+    const earliest = new Date(`${date}T00:00:00Z`);
+    earliest.setUTCDate(earliest.getUTCDate() - lookbackDays);
+    const earliestStr = earliest.toISOString().slice(0, 10);
+    return db.select().from(fxRates)
+      .where(and(
+        eq(fxRates.currency, currency),
+        gte(fxRates.date, earliestStr),
+        lte(fxRates.date, date),
+      ))
+      .orderBy(desc(fxRates.date))
+      .limit(1)
+      .get();
+  },
+  getLatestDate: (currency) => {
+    const row = db.select({ date: fxRates.date }).from(fxRates)
+      .where(eq(fxRates.currency, currency))
+      .orderBy(desc(fxRates.date))
+      .limit(1)
+      .get();
+    return row?.date;
+  },
+  upsertBatch: (rows: NewFxRate[]) => {
+    for (const r of rows) {
+      db.insert(fxRates).values(r).onConflictDoUpdate({
+        target: [fxRates.date, fxRates.currency],
+        set: { rate_to_usd: r.rate_to_usd },
+      }).run();
+    }
+  },
+  count: () => {
+    const row = db.select({ n: sql<number>`count(*)` }).from(fxRates).get();
+    return row?.n ?? 0;
+  },
+});
+
 export const createDataRepository = (db: Db): DataRepository => ({
   transactions: createTransactionRepository(db),
   prices: createPriceRepository(db),
   balance: createBalanceRepository(db),
   flow: createFlowRepository(db),
   snapshots: createSnapshotRepository(db),
+  fx: createFxRepository(db),
 });

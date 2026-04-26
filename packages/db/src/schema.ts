@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, primaryKey, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 export const transactions = sqliteTable('transactions', {
   id:       integer('id').primaryKey({ autoIncrement: true }),
@@ -44,6 +44,14 @@ export const portfolioSnapshots = sqliteTable('portfolio_snapshots', {
   current_price: real('current_price').notNull(),
   currency:      text('currency').notNull().default('USD'),
 }, t => [uniqueIndex('snapshot_uq').on(t.date, t.ticker)]);
+
+// Daily FX rates: foreign currency per 1 USD (uniform direction).
+// USD has no row — code returns 1.0 for the base.
+export const fxRates = sqliteTable('fx_rates', {
+  date:        text('date').notNull(),                 // YYYY-MM-DD
+  currency:    text('currency').notNull(),             // KRW, JPY, EUR, CNY, GBP
+  rate_to_usd: real('rate_to_usd').notNull(),          // foreign per 1 USD
+}, t => [primaryKey({ columns: [t.date, t.currency] })]);
 
 export const prices = sqliteTable('prices', {
   ticker:         text('ticker').primaryKey(),

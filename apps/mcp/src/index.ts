@@ -2,14 +2,14 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { eq, asc, and, gte, lte } from 'drizzle-orm';
+import { eq, asc, desc, and, gte, lte } from 'drizzle-orm';
 import { createFinnhubClient } from '@firma/finnhub';
 import type { FinancialLineItem, FinancialPeriod } from '@firma/finnhub';
-import { createFredClient, assembleMacroSnapshot, assembleStressIndex, assembleRegime } from '@firma/fred';
+import { createFredClient, assembleMacroSnapshot, assembleStressIndex, assembleRegime, FX_BY_CURRENCY } from '@firma/fred';
 import { assembleBriefData } from '@firma/brief';
 import {
   getDb, getFinnhubKey, getFredKey,
-  transactions, balanceEntries, flowEntries, prices, portfolioSnapshots,
+  transactions, balanceEntries, flowEntries, prices, portfolioSnapshots, fxRates,
   aggregateHoldings, getActiveTickers,
 } from './db.ts';
 
@@ -17,7 +17,7 @@ const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
 
 const server = new McpServer({
   name: 'firma',
-  version: '0.8.0',
+  version: '0.9.0',
 });
 
 
@@ -582,6 +582,94 @@ server.tool(
     }
 
     return ok({ synced: results.length, tickers });
+  },
+);
+
+server.tool(
+  'sync_fx_rates',
+  'Backfill historical FX rate cache (KRW, JPY, EUR, CNY, GBP per USD) from FRED. Increment-only: starts from the last cached date, fetches up to today. On first run, backfills from earliest user transaction/balance/flow date. Required for accurate historical currency conversion.',
+  {},
+  async () => {
+    const apiKey = getFredKey();
+    if (!apiKey) return err('FRED API key not configured. Run: firma config set fred-key <key>');
+
+    const db = getDb();
+
+    // Find earliest user date
+    const txnDates = db.select({ date: transactions.date }).from(transactions).all().map(r => r.date);
+    const balDates = db.select({ date: balanceEntries.date }).from(balanceEntries).all().map(r => r.date);
+    const flowDates = db.select({ date: flowEntries.date }).from(flowEntries).all().map(r => r.date);
+    const allDates = [...txnDates, ...balDates, ...flowDates];
+    if (allDates.length === 0) return ok({ synced: 0, message: 'No user data — no FX backfill needed' });
+
+    const earliest = allDates.sort()[0];
+    const today = new Date().toISOString().slice(0, 10);
+    const client = createFredClient(apiKey);
+
+    const SUPPORTED = ['KRW', 'JPY', 'EUR', 'CNY', 'GBP'] as const;
+
+    const per_currency = await Promise.all(SUPPORTED.map(async (cur) => {
+      const fxDef = FX_BY_CURRENCY[cur];
+      if (!fxDef) return { currency: cur, rows_inserted: 0 };
+
+      // Increment-only
+      const latestRow = db.select({ date: fxRates.date }).from(fxRates)
+        .where(eq(fxRates.currency, cur))
+        .orderBy(desc(fxRates.date))
+        .limit(1).get();
+      const startDate = latestRow
+        ? new Date(new Date(`${latestRow.date}T00:00:00Z`).getTime() + 86_400_000).toISOString().slice(0, 10)
+        : earliest;
+      if (startDate > today) return { currency: cur, rows_inserted: 0 };
+
+      try {
+        const obs = await client.fetchObservations(fxDef.series_id, { from: startDate, to: today });
+        const valid = obs.filter((o): o is { date: string; value: number } => o.value != null);
+        const apply = fxDef.invert ? (v: number) => 1 / v : (v: number) => v;
+        for (const o of valid) {
+          db.insert(fxRates).values({
+            date: o.date, currency: cur, rate_to_usd: apply(o.value),
+          }).onConflictDoUpdate({
+            target: [fxRates.date, fxRates.currency],
+            set: { rate_to_usd: apply(o.value) },
+          }).run();
+        }
+        return { currency: cur, rows_inserted: valid.length };
+      } catch (e) {
+        return { currency: cur, rows_inserted: 0, error: e instanceof Error ? e.message : String(e) };
+      }
+    }));
+
+    const total = per_currency.reduce((s, c) => s + c.rows_inserted, 0);
+    return ok({ synced: total, per_currency, earliest_user_date: earliest });
+  },
+);
+
+server.tool(
+  'get_fx_rate',
+  'Look up the historical FX rate for a date and currency from the local cache (foreign per 1 USD). USD always returns 1.0. Falls back to the most recent rate within `lookback_days` (handles weekends/holidays). Returns null if no rate found in the lookback window. Run sync_fx_rates first to populate the cache.',
+  {
+    date:          z.string().describe('YYYY-MM-DD'),
+    currency:      z.string().describe('Currency code: USD/KRW/JPY/EUR/CNY/GBP'),
+    lookback_days: z.number().int().min(0).max(30).default(7).describe('Days to look back if exact date not cached'),
+  },
+  async ({ date, currency, lookback_days }) => {
+    const cur = currency.toUpperCase();
+    if (cur === 'USD') return ok({ date, currency: 'USD', rate_to_usd: 1.0, source_date: date });
+
+    const db = getDb();
+    const earliest = new Date(`${date}T00:00:00Z`);
+    earliest.setUTCDate(earliest.getUTCDate() - lookback_days);
+    const earliestStr = earliest.toISOString().slice(0, 10);
+
+    const row = db.select().from(fxRates)
+      .where(and(eq(fxRates.currency, cur), gte(fxRates.date, earliestStr), lte(fxRates.date, date)))
+      .orderBy(desc(fxRates.date))
+      .limit(1)
+      .get();
+
+    if (!row) return ok({ date, currency: cur, rate_to_usd: null, source_date: null, hint: 'Run sync_fx_rates to populate the cache' });
+    return ok({ date, currency: cur, rate_to_usd: row.rate_to_usd, source_date: row.date });
   },
 );
 

@@ -175,7 +175,8 @@ Your numbers never leave your machine.
 
 | Command | What it does |
 |---|---|
-| `firma sync` | Fetch latest prices from Finnhub |
+| `firma sync` | Fetch latest prices (Finnhub) + FX rate history (FRED) |
+| `firma sync fx` | FX rate history only — incremental backfill from your earliest entry date |
 | `firma mcp install` | Register MCP server in Claude Desktop |
 | `firma config set finnhub-key KEY` | Set Finnhub API key |
 | `firma config set fred-key KEY` | Set FRED API key (free at fred.stlouisfed.org) |
@@ -195,6 +196,8 @@ Two tools are available only via MCP (no CLI equivalent):
 |---|---|
 | `fetch_fred_series` | Fetch any FRED time series by ID (800K+ series available) |
 | `search_fred_series` | Search the FRED catalog by keyword to discover series IDs |
+
+`get_brief` is the richest single tool for daily check-ins — it returns holdings with weights, daily P&L, concentration, movers, news, earnings, macro context, stress/regime signals, and pre-computed portfolio insights in one call.
 
 ---
 

@@ -3,7 +3,7 @@ import { Command } from 'commander';
 import { intro, outro, log } from '@clack/prompts';
 import pc from 'picocolors';
 
-import { syncCommand } from './commands/sync.ts';
+import { syncCommand, syncFxCommand } from './commands/sync.ts';
 import { addTxnCommand } from './commands/add.ts';
 import { editTxnCommand, editBalanceCommand, editFlowCommand } from './commands/edit.ts';
 import { deleteTxnCommand, deleteBalanceCommand, deleteFlowCommand } from './commands/delete.ts';
@@ -29,7 +29,7 @@ import { mcpInstallCommand } from './commands/mcp.ts';
 import { setConfigValue, readConfig } from './config.ts';
 import { checkForUpdate } from './services/update-check.ts';
 
-const CURRENT_VERSION = '0.8.0';
+const CURRENT_VERSION = '0.9.0';
 
 const jsonMode = process.argv.includes('--json');
 
@@ -326,12 +326,22 @@ program
     (opts: { json?: boolean; refresh?: boolean }) => briefCommand({ json: opts.json ?? false, refresh: opts.refresh ?? false }),
     (opts) => opts.json ?? false));
 
-program
-  .command('sync')
-  .description('Sync latest stock prices from Finnhub')
+const sync = program.command('sync').description('Sync market data');
+
+sync
+  .command('all', { isDefault: true })
+  .description('Sync stock prices from Finnhub + FX rate history from FRED (default)')
   .option('--json', 'Output result as JSON')
   .action(wrapMaybeJson('firma sync',
     (opts: { json?: boolean }) => syncCommand({ json: opts.json ?? false }),
+    (opts) => opts.json ?? false));
+
+sync
+  .command('fx')
+  .description('Sync FX rate history (FRED) — backfill from earliest user data, increment-only')
+  .option('--json', 'Output result as JSON')
+  .action(wrapMaybeJson('firma sync fx',
+    (opts: { json?: boolean }) => syncFxCommand({ json: opts.json ?? false }),
     (opts) => opts.json ?? false));
 
 // ── config ─────────────────────────────────────────────

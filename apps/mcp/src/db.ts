@@ -1,12 +1,12 @@
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { transactions, balanceEntries, flowEntries, prices, portfolioSnapshots } from '@firma/db';
+import { transactions, balanceEntries, flowEntries, prices, portfolioSnapshots, fxRates } from '@firma/db';
 export { aggregateHoldings, getActiveTickers } from '@firma/db';
 import { homedir } from 'os';
 import { join } from 'path';
 import { mkdirSync, readFileSync } from 'fs';
 
-const schema = { transactions, balanceEntries, flowEntries, prices, portfolioSnapshots };
+const schema = { transactions, balanceEntries, flowEntries, prices, portfolioSnapshots, fxRates };
 
 type Config = { db_path?: string; finnhub_api_key?: string; fred_api_key?: string };
 
@@ -61,6 +61,12 @@ export const getDb = () => {
       current_price REAL NOT NULL, currency TEXT NOT NULL DEFAULT 'USD',
       UNIQUE (date, ticker)
     );
+    CREATE TABLE IF NOT EXISTS fx_rates (
+      date TEXT NOT NULL,
+      currency TEXT NOT NULL,
+      rate_to_usd REAL NOT NULL,
+      PRIMARY KEY (date, currency)
+    );
   `);
 
   const addCol = (table: string, col: string, def: string) => {
@@ -81,4 +87,4 @@ export const getDb = () => {
 export const getFinnhubKey = (): string | undefined => readConfig().finnhub_api_key;
 export const getFredKey    = (): string | undefined => readConfig().fred_api_key;
 
-export { transactions, balanceEntries, flowEntries, prices, portfolioSnapshots };
+export { transactions, balanceEntries, flowEntries, prices, portfolioSnapshots, fxRates };

@@ -1,4 +1,4 @@
-import type { Transaction, NewTransaction, BalanceEntry, NewBalanceEntry, FlowEntry, NewFlowEntry, Price, NewPrice, Snapshot, NewSnapshot } from './types.ts';
+import type { Transaction, NewTransaction, BalanceEntry, NewBalanceEntry, FlowEntry, NewFlowEntry, Price, NewPrice, Snapshot, NewSnapshot, FxRate, NewFxRate } from './types.ts';
 
 export interface TransactionRepository {
   getAll(ticker?: string): Transaction[];
@@ -39,10 +39,20 @@ export interface SnapshotRepository {
   deleteByDate(date: string): number;
 }
 
+export interface FxRepository {
+  getRate(date: string, currency: string): FxRate | undefined;
+  // Returns the rate on `date` if present; otherwise the most recent rate strictly before `date` within `lookbackDays`.
+  getRateOnOrBefore(date: string, currency: string, lookbackDays?: number): FxRate | undefined;
+  getLatestDate(currency: string): string | undefined;
+  upsertBatch(rows: NewFxRate[]): void;
+  count(): number;
+}
+
 export interface DataRepository {
   transactions: TransactionRepository;
   prices: PriceRepository;
   balance: BalanceRepository;
   flow: FlowRepository;
   snapshots: SnapshotRepository;
+  fx: FxRepository;
 }
