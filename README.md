@@ -26,6 +26,11 @@
   <code>npm install -g firma-app</code>
 </p>
 
+<p align="center">
+  🚧 Early stage — feedback and contributions welcome.<br/>
+  If you've installed it, I'd love to hear how you found it: <a href="https://github.com/evan-moon/firma/discussions">Discussions</a>
+</p>
+
 ---
 
 Track your portfolio, log trades, and analyze monthly cash flow — all from your terminal, all stored on your machine. Drop-in [MCP](https://modelcontextprotocol.io) integration means Claude reads, writes, and reasons about your finances directly. No vendor lock-in. No cloud sync. No financial data leaving your laptop.
@@ -72,24 +77,33 @@ Claude:  [renders live portfolio dashboard — holdings, net worth trend, asset 
 
 ## Get started
 
+The fastest path is to let Claude do the data entry. firma is built so the only thing you ever need to type at a terminal is the four-line setup below — everything else (logging trades, importing balances, syncing prices) happens through conversation.
+
 ```bash
 # 1. Install
 npm install -g firma-app
 
 # 2. Set API keys (both free)
-firma config set finnhub-key YOUR_KEY   # finnhub.io
-firma config set fred-key YOUR_KEY      # fred.stlouisfed.org (for macro)
+firma config set finnhub-key YOUR_KEY   # finnhub.io — prices, news, earnings
+firma config set fred-key YOUR_KEY      # fred.stlouisfed.org — macro & FX history
 
 # 3. Connect Claude Desktop
 firma mcp install
-# Restart Claude Desktop — that's it.
-
-# 4. Add your first trade and sync prices
-firma add txn
-firma sync
+# Restart Claude Desktop. firma tools should appear in the toolbar.
 ```
 
-Already have data? Skip to `firma show portfolio` and let Claude take it from there.
+**4. Now talk to Claude.** Drop a CSV / brokerage export / screenshot / plain text in chat and ask it to set up firma:
+
+```
+You:    Here's my IBKR trade history [trades.csv attached]. Set up firma.
+Claude: I see 47 transactions. Logging in chronological order so the avg
+        cost stays accurate... done. Now syncing prices and FX history...
+        Your portfolio: $179K, +$68,970 (+61%) all-time. TSLA is 78%.
+```
+
+Claude calls `add_txn` for each row, then `sync_prices` + `sync_fx_rates`, then `show_portfolio`. Same flow works for monthly balances and cash flow — `add_balance` / `add_flow` per row.
+
+> Prefer the CLI? Every MCP tool has a matching `firma` command — see [CLI reference](#cli-reference).
 
 ---
 
@@ -98,7 +112,8 @@ Already have data? Skip to `firma show portfolio` and let Claude take it from th
 All financial data is stored in `~/.firma/firma.db` — a local SQLite file only you can access. Nothing is sent to Firma servers.
 
 - **Prices** → Finnhub, called directly with your own API key
-- **Exchange rates** → open.er-api.com (no auth required)
+- **Exchange rates (live)** → open.er-api.com (no auth)
+- **Macro & historical FX** → FRED, called directly with your own API key; daily series cached locally in `~/.firma/firma.db` (`fx_rates` table)
 - **Claude reads data** → local process-to-process via MCP protocol
 
 Your numbers never leave your machine.
