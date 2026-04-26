@@ -1306,6 +1306,7 @@ __metadata:
     "@firma/db": "workspace:*"
     "@firma/finnhub": "workspace:*"
     "@firma/utils": "workspace:*"
+    "@modelcontextprotocol/sdk": "npm:^1.29.0"
     "@types/better-sqlite3": "npm:^7.6.13"
     "@types/node": "npm:^22.15.3"
     better-sqlite3: "npm:^12.9.0"
@@ -1315,6 +1316,7 @@ __metadata:
     tsup: "npm:^8.4.0"
     tsx: "npm:^4.19.3"
     typescript: "npm:^5.8.3"
+    zod: "npm:^3.23.0"
   bin:
     firma: ./dist/index.js
     firma-mcp: ./dist/mcp.js
