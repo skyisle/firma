@@ -5,7 +5,7 @@ import { getRepository } from '../db/index.ts';
 import { fetchFxRates } from '../services/fx.ts';
 import { inputCategoryGroup, type EntryResult } from './ledger-input.ts';
 import {
-  fmtAmount, entryKrw, FALLBACK_RATES, CURRENCY_SYMBOL,
+  fmtAmount, entryKrw, FALLBACK_RATES, CURRENCY_SYMBOL, formatCurrencyValue, storedToUsdAtDate, usdToDisplayAtDate,
   currentPeriod, periodEndDate,
   pickDisplayCurrency, pickInputCurrency,
 } from '../utils/index.ts';
@@ -100,25 +100,36 @@ export const showFlowCommand = async ({ json = false, period, currency }: { json
   }
 
   const cur = await pickDisplayCurrency(currency, json);
-  const rates = await fetchFxRates().catch(() => FALLBACK_RATES as Record<string, number>);
-  const displayRate = (rates[cur] ?? FALLBACK_RATES[cur]) as number;
-  const fmt = (amount: number, storedCurrency: string) =>
-    fmtAmount(entryKrw(amount, storedCurrency, rates), cur, displayRate);
+  const liveRates = await fetchFxRates().catch(() => FALLBACK_RATES as Record<string, number>);
+
+  const displayValueAt = (amount: number, storedCurrency: string, date: string): number => {
+    const usd = storedToUsdAtDate(amount, storedCurrency, date, repo.fx, liveRates) ?? 0;
+    return usdToDisplayAtDate(usd, date, cur, repo.fx, liveRates) ?? 0;
+  };
+
+  const fmt = (amount: number, storedCurrency: string, date: string) =>
+    formatCurrencyValue(displayValueAt(amount, storedCurrency, date), cur);
 
   const income   = entries.filter(e => e.type === 'income');
   const expenses = entries.filter(e => e.type === 'expense');
 
-  const sumKrw = (group: typeof entries) =>
-    group.reduce((s, e) => s + entryKrw(e.amount, e.currency, rates), 0);
+  const sumDisplay = (group: typeof entries) =>
+    group.reduce((s, e) => s + displayValueAt(e.amount, e.currency, e.date), 0);
 
-  const totalIncomeKrw  = sumKrw(income);
-  const totalExpenseKrw = sumKrw(expenses);
-  const netFlowKrw      = totalIncomeKrw - totalExpenseKrw;
-  const colorNet = netFlowKrw >= 0 ? pc.green : pc.red;
+  const totalIncome  = sumDisplay(income);
+  const totalExpense = sumDisplay(expenses);
+  const netFlow      = totalIncome - totalExpense;
+  const colorNet = netFlow >= 0 ? pc.green : pc.red;
 
   const renderRows = (group: typeof entries) =>
     group.length === 0 ? [pc.dim('  (none)')]
-      : group.map(e => `  ${pc.dim(e.category.padEnd(20))}${fmt(e.amount, e.currency).padStart(14)}`);
+      : group.map(e => `  ${pc.dim(e.category.padEnd(20))}${fmt(e.amount, e.currency, e.date).padStart(14)}`);
+
+  const periodDate = entries[0]?.date ?? targetPeriod;
+  const fxRow = cur !== 'USD' ? repo.fx.getRateOnOrBefore(periodDate, cur) : null;
+  const rateNote = fxRow
+    ? pc.dim(`FX @ ${periodDate}: 1 USD = ${fxRow.rate_to_usd.toFixed(4)} ${cur}  (from ${fxRow.date})`)
+    : null;
 
   const body = [
     pc.bold('INCOME'),
@@ -127,9 +138,10 @@ export const showFlowCommand = async ({ json = false, period, currency }: { json
     pc.bold('EXPENSES'),
     ...renderRows(expenses),
     pc.dim('─'.repeat(40)),
-    `${'Income'.padEnd(20)}${fmtAmount(totalIncomeKrw, cur, displayRate).padStart(14)}`,
-    `${'Expenses'.padEnd(20)}${fmtAmount(totalExpenseKrw, cur, displayRate).padStart(14)}`,
-    `${pc.bold('Net Flow'.padEnd(20))}${colorNet(pc.bold(fmtAmount(netFlowKrw, cur, displayRate).padStart(14)))}`,
+    `${'Income'.padEnd(20)}${formatCurrencyValue(totalIncome, cur).padStart(14)}`,
+    `${'Expenses'.padEnd(20)}${formatCurrencyValue(totalExpense, cur).padStart(14)}`,
+    `${pc.bold('Net Flow'.padEnd(20))}${colorNet(pc.bold(formatCurrencyValue(netFlow, cur).padStart(14)))}`,
+    ...(rateNote ? ['', rateNote] : []),
   ].join('\n');
 
   note(body, `Cash Flow  ${targetPeriod}`);

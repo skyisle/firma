@@ -2,7 +2,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { eq, asc, desc, and, gte, lte } from 'drizzle-orm';
+import { eq, asc, desc, and, gte, lte, sql } from 'drizzle-orm';
 import { createFinnhubClient } from '@firma/finnhub';
 import type { FinancialLineItem, FinancialPeriod } from '@firma/finnhub';
 import { createFredClient, assembleMacroSnapshot, assembleStressIndex, assembleRegime, FX_BY_CURRENCY } from '@firma/fred';
@@ -17,7 +17,7 @@ const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
 
 const server = new McpServer({
   name: 'firma',
-  version: '0.9.0',
+  version: '0.10.0',
 });
 
 
@@ -642,6 +642,42 @@ server.tool(
 
     const total = per_currency.reduce((s, c) => s + c.rows_inserted, 0);
     return ok({ synced: total, per_currency, earliest_user_date: earliest });
+  },
+);
+
+server.tool(
+  'show_fx_history',
+  'Inspect the local FX rate cache. Without `currency`, returns per-currency coverage (count + first/last date). With `currency`, returns the cached series — date range via from/to, or `limit` most-recent rows. USD has no rows (it\'s the base, always 1.0).',
+  {
+    currency: z.string().optional().describe('Currency code (KRW/JPY/EUR/CNY/GBP). Omit for coverage summary.'),
+    from:     z.string().optional().describe('Start date YYYY-MM-DD'),
+    to:       z.string().optional().describe('End date YYYY-MM-DD'),
+    limit:    z.number().int().min(1).max(10000).default(60).describe('Max rows when no date range (default 60)'),
+  },
+  async ({ currency, from, to, limit }) => {
+    const db = getDb();
+    if (!currency) {
+      const coverage = db.select({
+        currency:   fxRates.currency,
+        count:      sql<number>`count(*)`,
+        first_date: sql<string>`min(${fxRates.date})`,
+        last_date:  sql<string>`max(${fxRates.date})`,
+      }).from(fxRates).groupBy(fxRates.currency).orderBy(asc(fxRates.currency)).all();
+      return ok({ coverage });
+    }
+
+    const cur = currency.toUpperCase();
+    if (cur === 'USD') return ok({ currency: 'USD', rate_to_usd: 1.0, note: 'USD is the base — always 1.0' });
+
+    const conditions = [
+      eq(fxRates.currency, cur),
+      from ? gte(fxRates.date, from) : undefined,
+      to   ? lte(fxRates.date, to)   : undefined,
+    ].filter(Boolean) as Parameters<typeof and>;
+    const baseQuery = db.select().from(fxRates).where(and(...conditions)).orderBy(desc(fxRates.date));
+    const rows = (from || to) ? baseQuery.all() : baseQuery.limit(limit).all();
+
+    return ok({ currency: cur, count: rows.length, observations: rows });
   },
 );
 

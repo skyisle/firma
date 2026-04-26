@@ -6,7 +6,7 @@ import { getRepository } from '../db/index.ts';
 import { syncPrices } from '../services/sync.ts';
 import { fetchFxRates } from '../services/fx.ts';
 import { readConfig } from '../config.ts';
-import { fracBar, fmtAmount, entryKrw, FALLBACK_RATES, CURRENCY_SYMBOL, pickDisplayCurrency, stalenessLine, type Currency } from '../utils/index.ts';
+import { fracBar, fmtAmount, entryKrw, FALLBACK_RATES, CURRENCY_SYMBOL, formatCurrencyValue, storedToUsdAtDate, usdToDisplayAtDate, pickDisplayCurrency, stalenessLine, type Currency } from '../utils/index.ts';
 
 const fmt = {
   usd: (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
@@ -195,19 +195,23 @@ export const showPortfolioCommand = async ({ json = false, sync = true, currency
     const latestPeriod = balancePeriods[0];
     const balEntries = repo2.balance.getByPeriod(latestPeriod);
     const BAR_W = 20;
-    const rates = await fetchFxRates().catch(() => FALLBACK_RATES as Record<string, number>);
-    const rate = (rates[cur] ?? FALLBACK_RATES[cur]) as number;
-    const fmt2 = (krw: number) => fmtAmount(krw, cur, rate);
+    const liveRates = await fetchFxRates().catch(() => FALLBACK_RATES as Record<string, number>);
 
-    const toKrw = (e: { amount: number; currency: string }) => entryKrw(e.amount, e.currency, rates);
-    const totalAssets = balEntries.filter(e => e.type === 'asset').reduce((s, e) => s + toKrw(e), 0);
-    const totalLiab   = balEntries.filter(e => e.type === 'liability').reduce((s, e) => s + toKrw(e), 0);
+    // Convert each balance entry using the historical FX at its date.
+    const displayValueAt = (e: { amount: number; currency: string; date: string }): number => {
+      const usd = storedToUsdAtDate(e.amount, e.currency, e.date, repo2.fx, liveRates) ?? 0;
+      return usdToDisplayAtDate(usd, e.date, cur, repo2.fx, liveRates) ?? 0;
+    };
+    const fmt2 = (v: number) => formatCurrencyValue(v, cur);
+
+    const totalAssets = balEntries.filter(e => e.type === 'asset').reduce((s, e) => s + displayValueAt(e), 0);
+    const totalLiab   = balEntries.filter(e => e.type === 'liability').reduce((s, e) => s + displayValueAt(e), 0);
     const netWorth    = totalAssets - totalLiab;
 
     if (netWorth > 0) {
       const bySubType = balEntries
         .filter(e => e.type === 'asset')
-        .reduce((map, e) => map.set(e.sub_type, (map.get(e.sub_type) ?? 0) + toKrw(e)), new Map<string, number>());
+        .reduce((map, e) => map.set(e.sub_type, (map.get(e.sub_type) ?? 0) + displayValueAt(e)), new Map<string, number>());
 
       const SUB_LABEL: Record<string, string> = {
         cash: 'Cash', investment: 'Investments', other: 'Other Assets',
@@ -221,13 +225,18 @@ export const showPortfolioCommand = async ({ json = false, sync = true, currency
           return `  ${(SUB_LABEL[sub] ?? sub).padEnd(14)}  ${bar}  ${fmt2(amt)}  ${pc.dim(`${(pct * 100).toFixed(1)}%`)}`;
         });
 
-      const portfolioMvKrw = entryKrw(totalValue, 'USD', rates);
+      // Portfolio MV is "right now" — use live rate (not historical).
+      const liveTargetRate = (liveRates[cur] ?? FALLBACK_RATES[cur]) as number;
+      const liveUsdRate    = (liveRates['USD'] ?? FALLBACK_RATES['USD']) as number;
+      const portfolioMvDisplayLive = cur === 'USD'
+        ? totalValue
+        : totalValue * liveTargetRate / liveUsdRate;
       const portfolioMvDisplay = cur === 'USD'
         ? pc.dim(fmt.usd(totalValue))
-        : `${pc.dim(fmt2(portfolioMvKrw))}  ${pc.dim(`(≈ ${fmt.usd(totalValue)})`)}`;
+        : `${pc.dim(fmt2(portfolioMvDisplayLive))}  ${pc.dim(`(≈ ${fmt.usd(totalValue)})`)}`;
 
       lines.push('');
-      lines.push(`  ${'Net Worth'.padEnd(14)}  ${pc.dim('─'.repeat(BAR_W + 2))}  ${pc.bold(fmt2(netWorth))}  ${pc.dim(`(${latestPeriod})`)}`);
+      lines.push(`  ${'Net Worth'.padEnd(14)}  ${pc.dim('─'.repeat(BAR_W + 2))}  ${pc.bold(fmt2(netWorth))}  ${pc.dim(`(${latestPeriod}, FX @ entry date)`)}`);
       lines.push(`  ${pc.dim('Portfolio MV'.padEnd(14))}  ${pc.dim('─'.repeat(BAR_W + 2))}  ${portfolioMvDisplay}`);
 
       const fxLine = await renderFxContext(cur, totalValue);

@@ -6,7 +6,7 @@ import { getRepository } from '../db/index.ts';
 import { fetchFxRates } from '../services/fx.ts';
 import { inputCategoryGroup, type EntryResult } from './ledger-input.ts';
 import {
-  fmtAmount, entryKrw, FALLBACK_RATES, CURRENCY_SYMBOL,
+  fmtAmount, entryKrw, FALLBACK_RATES, CURRENCY_SYMBOL, formatCurrencyValue, storedToUsdAtDate, usdToDisplayAtDate,
   currentPeriod, periodEndDate,
   pickDisplayCurrency, pickInputCurrency,
 } from '../utils/index.ts';
@@ -119,24 +119,36 @@ export const showBalanceCommand = async ({ json = false, period, currency }: { j
   }
 
   const cur = await pickDisplayCurrency(currency, json);
-  const rates = await fetchFxRates().catch(() => FALLBACK_RATES as Record<string, number>);
-  const displayRate = (rates[cur] ?? FALLBACK_RATES[cur]) as number;
-  const fmt = (amount: number, storedCurrency: string) =>
-    fmtAmount(entryKrw(amount, storedCurrency, rates), cur, displayRate);
+  const liveRates = await fetchFxRates().catch(() => FALLBACK_RATES as Record<string, number>);
+
+  // Convert each entry to display currency at its OWN date (historical rate when available).
+  const displayValueAt = (amount: number, storedCurrency: string, date: string): number => {
+    const usd = storedToUsdAtDate(amount, storedCurrency, date, repo.fx, liveRates) ?? 0;
+    return usdToDisplayAtDate(usd, date, cur, repo.fx, liveRates) ?? 0;
+  };
+
+  const fmt = (amount: number, storedCurrency: string, date: string) =>
+    formatCurrencyValue(displayValueAt(amount, storedCurrency, date), cur);
 
   const assets      = entries.filter(e => e.type === 'asset');
   const liabilities = entries.filter(e => e.type === 'liability');
 
-  const sumKrw = (group: typeof entries) =>
-    group.reduce((s, e) => s + entryKrw(e.amount, e.currency, rates), 0);
+  const sumDisplay = (group: typeof entries) =>
+    group.reduce((s, e) => s + displayValueAt(e.amount, e.currency, e.date), 0);
 
-  const totalAssetsKrw = sumKrw(assets);
-  const totalLiabKrw   = sumKrw(liabilities);
-  const netWorthKrw    = totalAssetsKrw - totalLiabKrw;
+  const totalAssets = sumDisplay(assets);
+  const totalLiab   = sumDisplay(liabilities);
+  const netWorth    = totalAssets - totalLiab;
 
   const renderRows = (group: typeof entries) =>
     group.length === 0 ? [pc.dim('  (none)')]
-      : group.map(e => `  ${pc.dim(e.category.padEnd(20))}${fmt(e.amount, e.currency).padStart(14)}`);
+      : group.map(e => `  ${pc.dim(e.category.padEnd(20))}${fmt(e.amount, e.currency, e.date).padStart(14)}`);
+
+  const periodDate = entries[0]?.date ?? targetPeriod;
+  const fxRow = cur !== 'USD' ? repo.fx.getRateOnOrBefore(periodDate, cur) : null;
+  const rateNote = fxRow
+    ? pc.dim(`FX @ ${periodDate}: 1 USD = ${fxRow.rate_to_usd.toFixed(4)} ${cur}  (from ${fxRow.date})`)
+    : null;
 
   const body = [
     pc.bold('ASSETS'),
@@ -145,9 +157,10 @@ export const showBalanceCommand = async ({ json = false, period, currency }: { j
     pc.bold('LIABILITIES'),
     ...renderRows(liabilities),
     pc.dim('─'.repeat(40)),
-    `${'Assets'.padEnd(20)}${fmtAmount(totalAssetsKrw, cur, displayRate).padStart(14)}`,
-    `${'Liabilities'.padEnd(20)}${fmtAmount(totalLiabKrw, cur, displayRate).padStart(14)}`,
-    `${pc.bold('Net Worth'.padEnd(20))}${pc.bold(fmtAmount(netWorthKrw, cur, displayRate).padStart(14))}`,
+    `${'Assets'.padEnd(20)}${formatCurrencyValue(totalAssets, cur).padStart(14)}`,
+    `${'Liabilities'.padEnd(20)}${formatCurrencyValue(totalLiab, cur).padStart(14)}`,
+    `${pc.bold('Net Worth'.padEnd(20))}${pc.bold(formatCurrencyValue(netWorth, cur).padStart(14))}`,
+    ...(rateNote ? ['', rateNote] : []),
   ].join('\n');
 
   note(body, `Balance Sheet  ${targetPeriod}`);

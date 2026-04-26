@@ -19,6 +19,7 @@ import { showEarningsCommand } from './commands/earnings.ts';
 import { showDividendCommand } from './commands/dividend.ts';
 import { showConcentrationCommand } from './commands/concentration.ts';
 import { showMacroCommand } from './commands/macro.ts';
+import { showFxCommand } from './commands/fx.ts';
 import { showStressCommand } from './commands/stress.ts';
 import { showRegimeCommand } from './commands/regime.ts';
 import { briefCommand } from './commands/brief.ts';
@@ -29,7 +30,7 @@ import { mcpInstallCommand } from './commands/mcp.ts';
 import { setConfigValue, readConfig } from './config.ts';
 import { checkForUpdate } from './services/update-check.ts';
 
-const CURRENT_VERSION = '0.9.0';
+const CURRENT_VERSION = '0.10.0';
 
 const jsonMode = process.argv.includes('--json');
 
@@ -244,6 +245,18 @@ show
   .action(wrapMaybeJson('firma show regime',
     (opts: { json?: boolean }) => showRegimeCommand({ json: opts.json ?? false }),
     (opts) => opts.json ?? false));
+
+show
+  .command('fx [currency]')
+  .description('Inspect cached FX history. No arg = coverage summary; with currency = recent rates')
+  .option('--from <date>',  'Start date YYYY-MM-DD (date range mode)')
+  .option('--to <date>',    'End date YYYY-MM-DD (date range mode)')
+  .option('--limit <n>',    'Max rows (default: 30, ignored when --from/--to set)', '30')
+  .option('--json',         'Output as JSON')
+  .action(wrapMaybeJson('firma show fx',
+    (currency: string | undefined, opts: { json?: boolean; from?: string; to?: string; limit: string }) =>
+      showFxCommand(currency, { json: opts.json ?? false, from: opts.from, to: opts.to, limit: Number(opts.limit) }),
+    (_c, opts) => opts.json ?? false));
 
 show
   .command('snapshot [ticker]')

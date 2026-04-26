@@ -74,6 +74,7 @@ firma show concentration       # HHI by ticker / currency / sector / country
 firma show macro               # FRED macro snapshot (8 indicators + dynamic FX)
 firma show stress              # Economic Stress Index (0-100) from 5 FRED series
 firma show regime              # Macro regime bias (Risk-on / Mixed / Risk-off) from 5 signals
+firma show fx [currency]       # Inspect cached FX history (coverage summary or per-currency series)
 firma show news <ticker>
 firma show insider <ticker>
 firma show financials <ticker>
@@ -122,6 +123,7 @@ show_regime                         # Macro regime bias (5 binary signals → Ri
 fetch_fred_series / search_fred_series  # raw FRED data layer
 sync_fx_rates                       # backfill historical FX rate cache (KRW/JPY/EUR/CNY/GBP per USD)
 get_fx_rate                         # lookup historical FX rate for a date
+show_fx_history                     # inspect cached FX series (coverage summary or per-currency)
 get_brief                           # daily brief (cached per day)
 report_balance / report_flow / report_combined / report_settle
 sync_prices

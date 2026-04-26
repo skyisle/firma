@@ -179,6 +179,7 @@ Your numbers never leave your machine.
 | `firma show macro` | VIX, 10Y yield, yield curve, USD index, HY spread, inflation, fed funds, FX (cached per day) |
 | `firma show stress` | Economic Stress Index (0–100) from 5 FRED series with per-component breakdown |
 | `firma show regime` | Macro regime bias (Risk-on / Mixed / Risk-off) from 5 binary signals — descriptive heuristic, not advice |
+| `firma show fx [currency]` | Inspect cached FX history — coverage summary or per-currency series with `--from`/`--to`/`--limit` |
 
 ### Daily Brief
 

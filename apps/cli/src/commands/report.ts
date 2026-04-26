@@ -3,9 +3,11 @@ import pc from 'picocolors';
 import { getRepository } from '../db/index.ts';
 import { fetchFxRates } from '../services/fx.ts';
 import {
-  fmtAmount, entryKrw, fracBar, FALLBACK_RATES, currentPeriod, pickDisplayCurrency, type Currency,
+  fmtAmount, fracBar, FALLBACK_RATES, currentPeriod, pickDisplayCurrency,
+  formatCurrencyValue, storedToUsdAtDate, usdToDisplayAtDate,
+  type Currency,
 } from '../utils/index.ts';
-import type { BalanceEntry, FlowEntry } from '@firma/db';
+import type { BalanceEntry, FlowEntry, FxRepository } from '@firma/db';
 
 type BalancePeriod = { period: string; assets: number; liabilities: number; netWorth: number };
 type FlowPeriod    = { period: string; income: number; expenses: number; netFlow: number };
@@ -48,25 +50,36 @@ const BALANCE_LABEL: Record<string, string> = {
 };
 
 
-const aggregateBalance = (entries: BalanceEntry[], rates: Record<string, number>) =>
+// Convert stored amount to display currency using historical FX at entry's date.
+const toDisplayAtDate = (
+  e: { amount: number; currency: string; date: string },
+  cur: Currency,
+  fxRepo: FxRepository,
+  liveRates: Record<string, number>,
+): number => {
+  const usd = storedToUsdAtDate(e.amount, e.currency, e.date, fxRepo, liveRates) ?? 0;
+  return usdToDisplayAtDate(usd, e.date, cur, fxRepo, liveRates) ?? 0;
+};
+
+const aggregateBalance = (entries: BalanceEntry[], cur: Currency, fxRepo: FxRepository, liveRates: Record<string, number>) =>
   [...entries.reduce((map, e) => {
-    const krw = entryKrw(e.amount, e.currency, rates);
+    const v = toDisplayAtDate(e, cur, fxRepo, liveRates);
     const prev = map.get(e.period) ?? { assets: 0, liabilities: 0 };
     return map.set(e.period, {
-      assets:      prev.assets      + (e.type === 'asset'     ? krw : 0),
-      liabilities: prev.liabilities + (e.type === 'liability' ? krw : 0),
+      assets:      prev.assets      + (e.type === 'asset'     ? v : 0),
+      liabilities: prev.liabilities + (e.type === 'liability' ? v : 0),
     });
   }, new Map<string, { assets: number; liabilities: number }>()).entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([period, { assets, liabilities }]) => ({ period, assets, liabilities, netWorth: assets - liabilities }));
 
-const aggregateFlow = (entries: FlowEntry[], rates: Record<string, number>) =>
+const aggregateFlow = (entries: FlowEntry[], cur: Currency, fxRepo: FxRepository, liveRates: Record<string, number>) =>
   [...entries.reduce((map, e) => {
-    const krw = entryKrw(e.amount, e.currency, rates);
+    const v = toDisplayAtDate(e, cur, fxRepo, liveRates);
     const prev = map.get(e.period) ?? { income: 0, expenses: 0 };
     return map.set(e.period, {
-      income:   prev.income   + (e.type === 'income'  ? krw : 0),
-      expenses: prev.expenses + (e.type === 'expense' ? krw : 0),
+      income:   prev.income   + (e.type === 'income'  ? v : 0),
+      expenses: prev.expenses + (e.type === 'expense' ? v : 0),
     });
   }, new Map<string, { income: number; expenses: number }>()).entries()]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -117,7 +130,10 @@ const renderBalance = (rows: BalancePeriod[], fmt: (v: number) => string): { tab
   return { table: `${header}\n${divider}\n${lines.join('\n')}${tableFooter}`, chart: chartLines.join('\n') };
 };
 
-const renderBalanceBreakdown = (entries: BalanceEntry[], year: string, fmt: (v: number) => string, rates: Record<string, number>): string => {
+const renderBalanceBreakdown = (
+  entries: BalanceEntry[], year: string, fmt: (v: number) => string,
+  cur: Currency, fxRepo: FxRepository, liveRates: Record<string, number>,
+): string => {
   const yearEntries = entries.filter(e => e.period.startsWith(year));
   if (yearEntries.length === 0) return pc.dim(`No data for ${year}`);
 
@@ -128,8 +144,8 @@ const renderBalanceBreakdown = (entries: BalanceEntry[], year: string, fmt: (v: 
   const liabBySubType  = new Map<string, number>();
   for (const e of latest) {
     const map = e.type === 'asset' ? assetBySubType : liabBySubType;
-    const krw = entryKrw(e.amount, e.currency, rates);
-    map.set(e.sub_type, (map.get(e.sub_type) ?? 0) + krw);
+    const v = toDisplayAtDate(e, cur, fxRepo, liveRates);
+    map.set(e.sub_type, (map.get(e.sub_type) ?? 0) + v);
   }
 
   const totalAssets = [...assetBySubType.values()].reduce((s, v) => s + v, 0);
@@ -170,7 +186,10 @@ const renderFlow = (rows: FlowPeriod[], fmt: (v: number) => string): { table: st
   return { table: `${header}\n${divider}\n${lines.join('\n')}${tableFooter}`, chart: `${pc.dim('◀ expense · saving ▶')}\n${chartLines.join('\n')}` };
 };
 
-const renderFlowBreakdown = (entries: FlowEntry[], year: string, fmt: (v: number) => string, rates: Record<string, number>): string => {
+const renderFlowBreakdown = (
+  entries: FlowEntry[], year: string, fmt: (v: number) => string,
+  cur: Currency, fxRepo: FxRepository, liveRates: Record<string, number>,
+): string => {
   const yearEntries = entries.filter(e => e.period.startsWith(year));
   if (yearEntries.length === 0) return pc.dim(`No data for ${year}`);
 
@@ -178,8 +197,8 @@ const renderFlowBreakdown = (entries: FlowEntry[], year: string, fmt: (v: number
   const expenseMap = new Map<string, number>();
   for (const e of yearEntries) {
     const map = e.type === 'income' ? incomeMap : expenseMap;
-    const krw = entryKrw(e.amount, e.currency, rates);
-    map.set(e.category, (map.get(e.category) ?? 0) + krw);
+    const v = toDisplayAtDate(e, cur, fxRepo, liveRates);
+    map.set(e.category, (map.get(e.category) ?? 0) + v);
   }
 
   const totalIncome  = [...incomeMap.values()].reduce((s, v) => s + v, 0);
@@ -230,14 +249,16 @@ const reportSettle = async (period: string | undefined, json: boolean, currency:
     return;
   }
 
-  const rates = await fetchFxRates().catch(() => FALLBACK_RATES as Record<string, number>);
-  const rate = (rates[currency] ?? FALLBACK_RATES[currency]) as number;
-  const fmt = (krw: number) => fmtAmount(krw, currency, rate);
+  const liveRates = await fetchFxRates().catch(() => FALLBACK_RATES as Record<string, number>);
+  const fmt = (v: number) => formatCurrencyValue(v, currency);
 
-  const total_assets      = balEntries.filter(e => e.type === 'asset').reduce((s, e) => s + entryKrw(e.amount, e.currency, rates), 0);
-  const total_liabilities = balEntries.filter(e => e.type === 'liability').reduce((s, e) => s + entryKrw(e.amount, e.currency, rates), 0);
-  const total_income      = flowEnts.filter(e => e.type === 'income').reduce((s, e) => s + entryKrw(e.amount, e.currency, rates), 0);
-  const total_expenses    = flowEnts.filter(e => e.type === 'expense').reduce((s, e) => s + entryKrw(e.amount, e.currency, rates), 0);
+  const sumDisplay = (group: typeof balEntries | typeof flowEnts, type: string) =>
+    group.filter(e => e.type === type).reduce((s, e) => s + toDisplayAtDate(e, currency, repo.fx, liveRates), 0);
+
+  const total_assets      = sumDisplay(balEntries, 'asset');
+  const total_liabilities = sumDisplay(balEntries, 'liability');
+  const total_income      = sumDisplay(flowEnts,   'income');
+  const total_expenses    = sumDisplay(flowEnts,   'expense');
   const net_worth         = total_assets - total_liabilities;
   const net_flow          = total_income - total_expenses;
 
@@ -274,14 +295,13 @@ export const reportCommand = async (
   const showFlow    = !target || target === 'flow';
 
   const repo = getRepository();
-  const [rates, balanceData, flowData] = await Promise.all([
+  const [liveRates, balanceData, flowData] = await Promise.all([
     fetchFxRates().catch(() => FALLBACK_RATES as Record<string, number>),
     showBalance ? Promise.resolve(repo.balance.getAll()) : Promise.resolve([]),
     showFlow    ? Promise.resolve(repo.flow.getAll())    : Promise.resolve([]),
   ]);
 
-  const rate = (rates[cur] ?? FALLBACK_RATES[cur]) as number;
-  const fmt = (v: number) => fmtAmount(v, cur, rate);
+  const fmt = (v: number) => formatCurrencyValue(v, cur);
   const currentYear = new Date().getFullYear().toString();
 
   if (json) {
@@ -290,24 +310,24 @@ export const reportCommand = async (
   }
 
   if (showBalance) {
-    const rows = aggregateBalance(balanceData, rates).slice(-36);
+    const rows = aggregateBalance(balanceData, cur, repo.fx, liveRates).slice(-36);
     if (rows.length === 0) log.warn('No balance sheet data found.');
     else {
       const { table, chart } = renderBalance(rows, fmt);
       note(table, 'Balance Sheet');
       note(chart, 'Net Worth Trend');
-      note(renderBalanceBreakdown(balanceData, currentYear, fmt, rates), `${currentYear} Asset Breakdown`);
+      note(renderBalanceBreakdown(balanceData, currentYear, fmt, cur, repo.fx, liveRates), `${currentYear} Asset Breakdown`);
     }
   }
 
   if (showFlow) {
-    const rows = aggregateFlow(flowData, rates).slice(-36);
+    const rows = aggregateFlow(flowData, cur, repo.fx, liveRates).slice(-36);
     if (rows.length === 0) log.warn('No cash flow data found.');
     else {
       const { table, chart } = renderFlow(rows, fmt);
       note(table, 'Cash Flow');
       note(chart, 'Savings Trend');
-      note(renderFlowBreakdown(flowData, currentYear, fmt, rates), `${currentYear} Breakdown`);
+      note(renderFlowBreakdown(flowData, currentYear, fmt, cur, repo.fx, liveRates), `${currentYear} Breakdown`);
     }
   }
 };

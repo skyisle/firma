@@ -135,6 +135,26 @@ const createFxRepository = (db: Db): FxRepository => ({
     const row = db.select({ n: sql<number>`count(*)` }).from(fxRates).get();
     return row?.n ?? 0;
   },
+  getRange: ({ currency, from, to, limit }) => {
+    const conditions = [
+      currency ? eq(fxRates.currency, currency) : undefined,
+      from     ? gte(fxRates.date, from)        : undefined,
+      to       ? lte(fxRates.date, to)          : undefined,
+    ].filter(Boolean) as Parameters<typeof and>;
+    const baseQuery = conditions.length
+      ? db.select().from(fxRates).where(and(...conditions))
+      : db.select().from(fxRates);
+    const ordered = baseQuery.orderBy(desc(fxRates.date), asc(fxRates.currency));
+    return limit ? ordered.limit(limit).all() : ordered.all();
+  },
+  getCoverage: () => {
+    return db.select({
+      currency:   fxRates.currency,
+      count:      sql<number>`count(*)`,
+      first_date: sql<string>`min(${fxRates.date})`,
+      last_date:  sql<string>`max(${fxRates.date})`,
+    }).from(fxRates).groupBy(fxRates.currency).orderBy(asc(fxRates.currency)).all();
+  },
 });
 
 export const createDataRepository = (db: Db): DataRepository => ({

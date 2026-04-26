@@ -44,6 +44,8 @@ export interface FxRepository {
   // Returns the rate on `date` if present; otherwise the most recent rate strictly before `date` within `lookbackDays`.
   getRateOnOrBefore(date: string, currency: string, lookbackDays?: number): FxRate | undefined;
   getLatestDate(currency: string): string | undefined;
+  getRange(opts: { currency?: string; from?: string; to?: string; limit?: number }): FxRate[];
+  getCoverage(): { currency: string; count: number; first_date: string; last_date: string }[];
   upsertBatch(rows: NewFxRate[]): void;
   count(): number;
 }
