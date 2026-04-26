@@ -33,6 +33,16 @@ packages/
 - **Local SQLite** — all data stored in `~/.firma/firma.db` via better-sqlite3 + Drizzle ORM
 - **Finnhub** — stock price provider; API key stored in `~/.firma/config.json`
 
+## Build: MCP bundling
+
+`apps/mcp`는 published 패키지가 아니다. CLI 빌드 시 `apps/mcp/dist/index.js`를 `apps/cli/dist/mcp.js`로 복사해서 `firma-mcp` 바이너리로 배포한다.
+
+tsup 기본 동작은 node_modules 의존성을 external로 남긴다. 개발 환경에서는 Yarn hoisting으로 루트 `node_modules`에서 찾지만, `npm i -g firma-app`으로 글로벌 설치하면 `firma-app`의 deps만 설치되므로 MCP 전용 패키지(`@modelcontextprotocol/sdk`, `zod`)가 누락된다.
+
+따라서 `apps/mcp/tsup.config.ts`에서 해당 패키지를 `noExternal`로 번들에 직접 포함시킨다. `better-sqlite3`는 네이티브 애드온이므로 절대 번들에 포함하지 않는다 (항상 external).
+
+MCP 전용 deps를 추가할 때는 `apps/mcp/package.json`에만 선언하고, `apps/mcp/tsup.config.ts`의 `noExternal` 배열에도 추가한다. `apps/cli/package.json`에는 넣지 않는다.
+
 ## CLI Commands
 
 Three verb groups: `add` (input), `show` (read), `report` (aggregated).
@@ -56,6 +66,7 @@ firma show balance [-p YYYY-MM]
 firma show flow    [-p YYYY-MM]
 firma show snapshot [ticker]   # portfolio value history; --from/--to for date range
 firma show dividend            # estimated annual income + per-ticker yield
+firma show concentration       # HHI by ticker / currency / sector / country
 firma show news <ticker>
 firma show insider <ticker>
 firma show financials <ticker>
@@ -79,6 +90,7 @@ firma delete snapshot [date]       # deletes all holdings for that date
 # alias: `firma rm ...` for delete
 
 # actions
+firma brief                   # daily brief: movers + news + earnings (cached per day)
 firma sync
 firma mcp install
 ```
@@ -95,6 +107,8 @@ delete_balance / delete_flow        # period-level (or single entry by composite
 add_snapshot / edit_snapshot / delete_snapshot / show_snapshot
 show_portfolio / show_txns / show_balance / show_flow / show_prices
 show_dividend / show_news / show_insider / show_financials / show_earnings
+show_concentration                  # HHI by dimension
+get_brief                           # daily brief (cached per day)
 report_balance / report_flow / report_combined / report_settle
 sync_prices
 ```
