@@ -5,7 +5,7 @@ import { getRepository } from '../db/index.ts';
 import { fetchFxRates } from '../services/fx.ts';
 import { inputCategoryGroup, type EntryResult } from './ledger-input.ts';
 import {
-  fmtAmount, entryKrw, FALLBACK_RATES, CURRENCY_SYMBOL, formatCurrencyValue, storedToUsdAtDate, usdToDisplayAtDate,
+  FALLBACK_RATES, CURRENCY_SYMBOL, formatCurrencyValue, storedToUsdAtDate, usdToDisplayAtDate,
   currentPeriod, periodEndDate,
   pickDisplayCurrency, pickInputCurrency,
 } from '../utils/index.ts';

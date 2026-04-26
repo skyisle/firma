@@ -17,7 +17,7 @@ const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
 
 const server = new McpServer({
   name: 'firma',
-  version: '0.10.0',
+  version: '0.11.0',
 });
 
 
@@ -33,7 +33,7 @@ const err = (msg: string) => ({
 
 server.tool(
   'show_portfolio',
-  'Get current stock holdings with average cost and cached prices',
+  'Current holdings derived from the user\'s transaction log: ticker, shares, avg cost, current price, market value, P&L (absolute and %). Computed live — no caching. For the daily check-in, prefer get_brief which already includes this data plus weights, news, earnings, and macro context in one call.',
   {},
   async () => {
     const db = getDb();
@@ -62,7 +62,7 @@ server.tool(
 
 server.tool(
   'show_txns',
-  'List transactions, optionally filtered by ticker symbol',
+  'Full transaction log (buys, sells, deposits, dividends, taxes) ordered by date ascending. Pass `ticker` to filter to one symbol — useful for "show me all my AAPL trades" or computing a per-position story. Each row has the original currency it was entered in.',
   { ticker: z.string().optional().describe('Filter by ticker (e.g. AAPL)') },
   async ({ ticker }) => {
     const db = getDb();
@@ -75,7 +75,7 @@ server.tool(
 
 server.tool(
   'show_balance',
-  'Get balance sheet entries (assets and liabilities). Optionally filter by period (YYYY-MM)',
+  'Stored balance sheet entries (assets + liabilities) by period. Each entry has type (asset|liability), sub_type (cash|investment|other|short_term|long_term), category, amount in USD, and the entry date. Without `period`, returns ALL periods — use this for trends; with `period` (YYYY-MM), returns one month\'s snapshot.',
   { period: z.string().optional().describe('Period filter e.g. "2025-03"') },
   async ({ period }) => {
     const db = getDb();
@@ -88,7 +88,7 @@ server.tool(
 
 server.tool(
   'show_flow',
-  'Get cash flow entries (income and expenses). Optionally filter by period (YYYY-MM)',
+  'Stored monthly cash flow entries (income + expenses) by period. Each entry has type (income|expense), sub_type, category, amount in USD, date. Without `period` returns all periods; with `period` (YYYY-MM) returns one month. For trend analysis use report_flow which aggregates and adds savings rate.',
   { period: z.string().optional().describe('Period filter e.g. "2025-03"') },
   async ({ period }) => {
     const db = getDb();
@@ -235,7 +235,7 @@ server.tool(
 
 server.tool(
   'show_prices',
-  'Get cached stock prices for all synced tickers',
+  'Raw cached price rows for all synced tickers — current_price, prev_close, change_percent, 52w high/low, dividend yield, sector, country, last sync time. Useful for tool-level inspection or when you need price metadata not exposed by show_portfolio (e.g. sector classification, sync freshness).',
   {},
   async () => {
     const db = getDb();
@@ -254,11 +254,20 @@ server.tool(
     const today = new Date().toISOString().slice(0, 10);
     const cacheDir = `${process.env.HOME ?? ''}/.firma/cache`;
     const cachePath = `${cacheDir}/brief-${today}.json`;
+    const dbFile = `${process.env.HOME ?? ''}/.firma/firma.db`;
     const fs = await import('fs');
 
+    const mtimeOr = (p: string): number => {
+      try { return fs.statSync(p).mtimeMs; } catch { return 0; }
+    };
+
     if (!refresh && fs.existsSync(cachePath)) {
-      try { return ok(JSON.parse(fs.readFileSync(cachePath, 'utf-8'))); }
-      catch { /* fall through to regen */ }
+      const cacheMs = mtimeOr(cachePath);
+      const dbMs    = Math.max(mtimeOr(dbFile), mtimeOr(`${dbFile}-wal`));
+      if (cacheMs > dbMs) {
+        try { return ok(JSON.parse(fs.readFileSync(cachePath, 'utf-8'))); }
+        catch { /* fall through to regen */ }
+      }
     }
 
     const db = getDb();
@@ -330,7 +339,7 @@ server.tool(
 
 server.tool(
   'add_txn',
-  'Record a stock transaction (buy, sell, deposit, dividend, tax)',
+  'Insert one stock transaction. Use this when bulk-importing from a CSV/statement (call once per row in chronological order — average cost depends on order). Types: buy/sell move shares; deposit adds shares (set price=0 for grants/transfers, or actual cost basis); dividend/tax record cash events (price = total amount, shares = 1). The currency arg is the trade\'s native currency, not the user\'s home currency.',
   {
     ticker:   z.string().describe('Stock ticker symbol (e.g. AAPL)'),
     date:     z.string().describe('Transaction date (YYYY-MM-DD)'),
@@ -377,7 +386,7 @@ server.tool(
 
 server.tool(
   'delete_txn',
-  'Delete a transaction by id',
+  'Delete a single transaction by its id. The user must confirm — never call this without explicit instruction (e.g. "delete transaction #42"). Removing a transaction recalculates all subsequent positions/avg cost since holdings are derived from the log.',
   { id: z.number().int().positive() },
   async ({ id }) => {
     const db = getDb();
@@ -538,6 +547,48 @@ server.tool(
     const res = db.delete(flowEntries).where(eq(flowEntries.period, period)).run();
     if (res.changes === 0) return err(`No flow entries for ${period}`);
     return ok({ deleted: res.changes, period });
+  },
+);
+
+server.tool(
+  'setup_status',
+  'One-shot setup diagnostic — returns whether API keys are set, how much user data is registered, and FX cache coverage. Call this first when a user opens a fresh Claude conversation, or when something seems missing — the response\'s `next_steps` array tells you exactly what to do (set a key, ask the user to import data, run sync_fx_rates, etc.) without making the user run anything.',
+  {},
+  async () => {
+    const db = getDb();
+    const txnCount     = db.select({ n: sql<number>`count(*)` }).from(transactions).get()?.n ?? 0;
+    const balanceCount = db.select({ n: sql<number>`count(*)` }).from(balanceEntries).get()?.n ?? 0;
+    const flowCount    = db.select({ n: sql<number>`count(*)` }).from(flowEntries).get()?.n ?? 0;
+    const fxCount      = db.select({ n: sql<number>`count(*)` }).from(fxRates).get()?.n ?? 0;
+
+    const finnhubKey = getFinnhubKey();
+    const fredKey    = getFredKey();
+
+    const next_steps: string[] = [];
+    if (!finnhubKey) next_steps.push('Tell the user to run: firma config set finnhub-key <key>  (free at finnhub.io). Required for prices.');
+    if (!fredKey)    next_steps.push('Tell the user to run: firma config set fred-key <key>  (free at fred.stlouisfed.org). Required for macro and historical FX.');
+    if (txnCount === 0) next_steps.push('Ask the user for their trade history (CSV / brokerage export / paste). Then call add_txn for each row.');
+    if (txnCount > 0 && fxCount === 0 && fredKey) next_steps.push('Call sync_fx_rates to backfill historical FX.');
+    if (txnCount > 0 && finnhubKey)               next_steps.push('Call sync_prices to fetch latest prices.');
+    if (next_steps.length === 0) next_steps.push('Setup looks complete. Call get_brief for the daily snapshot.');
+
+    return ok({
+      keys: {
+        finnhub: finnhubKey ? 'set' : 'missing',
+        fred:    fredKey    ? 'set' : 'missing',
+      },
+      data: {
+        transactions: txnCount,
+        balance_entries: balanceCount,
+        flow_entries: flowCount,
+      },
+      fx_cache: {
+        rows: fxCount,
+        ready: fxCount > 0,
+      },
+      ready: Boolean(finnhubKey && txnCount > 0),
+      next_steps,
+    });
   },
 );
 
@@ -807,7 +858,7 @@ server.tool(
 
 server.tool(
   'delete_snapshot',
-  'Delete all snapshot entries for a given date.',
+  'Delete all portfolio snapshot rows for a given date (YYYY-MM-DD). Use only when the user explicitly asks to remove a bad snapshot — destructive.',
   { date: z.string().describe('Snapshot date (YYYY-MM-DD)') },
   async ({ date }) => {
     const db = getDb();
@@ -881,7 +932,7 @@ server.tool(
 
 server.tool(
   'show_news',
-  'Fetch recent company news for a ticker from Finnhub',
+  'Recent company news from Finnhub for a single ticker — headline, summary, source, published timestamp, URL. Default lookback is 7 days, capped to `limit` items (default 10). For news across all holdings in one call, prefer get_brief which aggregates the last 24h.',
   {
     ticker: z.string().describe('Stock ticker symbol (e.g. AAPL)'),
     days:   z.number().int().min(1).max(30).default(7).describe('Days to look back (default: 7)'),

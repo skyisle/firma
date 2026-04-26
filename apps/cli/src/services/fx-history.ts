@@ -18,7 +18,7 @@ const earliestUserDate = (): string | null => {
   return dates.sort()[0];
 };
 
-export type FxBackfillResult =
+type FxBackfillResult =
   | { ok: true; per_currency: { currency: string; rows_inserted: number; first_date: string | null; last_date: string | null }[] }
   | { ok: false; reason: 'no-fred-key' | 'no-user-data' | 'fetch-failed'; error?: string };
 
@@ -74,11 +74,3 @@ export const backfillFxRates = async (): Promise<FxBackfillResult> => {
   }
 };
 
-// Resolve historical FX rate (foreign per 1 USD) for a given date.
-// USD returns 1.0. Falls back to most recent cached rate within `lookbackDays`.
-export const getHistoricalFxRate = (date: string, currency: string, lookbackDays = 7): number | null => {
-  if (currency.toUpperCase() === 'USD') return 1.0;
-  const repo = getRepository();
-  const row = repo.fx.getRateOnOrBefore(date, currency.toUpperCase(), lookbackDays);
-  return row?.rate_to_usd ?? null;
-};

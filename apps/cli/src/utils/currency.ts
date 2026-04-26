@@ -20,7 +20,3 @@ export const formatCurrencyValue = (value: number, currency: Currency): string =
 
 export const fmtAmount = (amountKrw: number, currency: Currency, rate: number) =>
   formatCurrencyValue(amountKrw * rate, currency);
-
-// Normalize a stored amount (in any currency) to KRW for aggregation/display.
-export const entryKrw = (amount: number, storedCurrency: string, rates: Record<string, number>): number =>
-  amount / (rates[storedCurrency] ?? FALLBACK_RATES[storedCurrency] ?? 1);

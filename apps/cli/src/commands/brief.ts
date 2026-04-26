@@ -1,7 +1,7 @@
 import { log, note, spinner } from '@clack/prompts';
 import pc from 'picocolors';
 import { assembleBrief, readCachedBrief, type BriefData, type BriefMacro, type BriefSignals } from '../services/brief.ts';
-import { CURRENCY_SYMBOL, type Currency } from '../utils/index.ts';
+import { CURRENCY_SYMBOL, tierColor, deltaColor, type Currency, type Tier, type Polarity } from '../utils/index.ts';
 
 const fmtUsd = (n: number) => `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 const fmtPct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
@@ -40,6 +40,13 @@ const renderNews = (news: BriefData['news'], limit = 8): string[] => {
   });
 };
 
+// Per-indicator color spec (matches show macro for consistency).
+const MACRO_SPEC: Record<string, { level: (v: number) => Tier; polarity: Polarity }> = {
+  vix:   { level: v => v < 15 ? 'good' : v < 20 ? 'neutral' : v < 30 ? 'caution' : 'alert', polarity: 'up_bad' },
+  ust10: { level: () => 'neutral', polarity: 'up_bad' },
+  fx:    { level: () => 'neutral', polarity: 'neutral' },
+};
+
 const vixLabel = (v: number): string => {
   if (v < 15) return 'calm';
   if (v < 20) return 'moderate';
@@ -51,52 +58,56 @@ const renderMacro = (macro: BriefMacro | null): string[] => {
   if (!macro) return [pc.dim('  (FRED key not set — run `firma config set fred-key <key>`)')];
 
   const homeSym = CURRENCY_SYMBOL[macro.home_currency as Currency] ?? macro.home_currency;
-  const fmtHomeAmount = (n: number) => {
-    const abs = Math.abs(n);
-    return `${homeSym}${Math.round(abs).toLocaleString('en-US')}`;
-  };
+  const fmtHomeAmount = (n: number) => `${homeSym}${Math.round(Math.abs(n)).toLocaleString('en-US')}`;
 
   const rows: string[] = [];
 
   for (const r of macro.indicators) {
     if (r.current == null) continue;
+    const spec = MACRO_SPEC[r.id] ?? { level: () => 'neutral' as Tier, polarity: 'neutral' as Polarity };
     const delta = r.prior_1d != null ? r.current - r.prior_1d : null;
-    const arrow = delta == null ? '' : delta > 0 ? pc.green('▲') : delta < 0 ? pc.red('▼') : pc.dim('·');
+    const arrow = delta == null ? ''
+      : delta > 0 ? deltaColor(spec.polarity, delta)('▲')
+      : delta < 0 ? deltaColor(spec.polarity, delta)('▼')
+      : pc.dim('·');
 
-    let valueStr: string;
+    let valueRaw: string;
     let deltaStr = '';
     let note = '';
 
     if (r.id === 'vix') {
-      valueStr = r.current.toFixed(2);
-      if (delta != null) deltaStr = pc.dim(`${arrow} ${fmtSigned(delta)}`);
+      valueRaw = r.current.toFixed(2);
+      if (delta != null) {
+        deltaStr = `${arrow} ${deltaColor(spec.polarity, delta)(fmtSigned(delta))}`;
+      }
       note = pc.dim(`(${vixLabel(r.current)})`);
     } else if (r.id === 'ust10') {
-      valueStr = `${r.current.toFixed(2)}%`;
+      valueRaw = `${r.current.toFixed(2)}%`;
       if (delta != null) {
         const bp = Math.round(delta * 100);
-        deltaStr = pc.dim(`${arrow} ${fmtSigned(bp, 0)}bp`);
+        deltaStr = `${arrow} ${deltaColor(spec.polarity, delta)(`${bp >= 0 ? '+' : '−'}${Math.abs(bp)}bp`)}`;
       }
     } else if (r.id === 'fx') {
-      valueStr = r.current >= 100
+      valueRaw = r.current >= 100
         ? r.current.toLocaleString('en-US', { maximumFractionDigits: 2 })
         : r.current.toFixed(4);
       if (delta != null) {
         const pct = (delta / r.prior_1d!) * 100;
-        deltaStr = pc.dim(`${arrow} ${fmtSigned(pct)}%`);
+        deltaStr = `${arrow} ${pc.dim(`${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(2)}%`)}`;
         if (delta > 0)      note = pc.dim('(USD strengthening)');
         else if (delta < 0) note = pc.dim('(USD weakening)');
       }
     } else {
-      valueStr = r.current.toFixed(2);
+      valueRaw = r.current.toFixed(2);
     }
 
-    rows.push(`  ${pc.bold(r.label.padEnd(22))}${valueStr.padEnd(12)}${deltaStr.padEnd(20)}${note}`);
+    const value = tierColor[spec.level(r.current)](valueRaw);
+    rows.push(`  ${pc.bold(r.label.padEnd(22))}${value.padEnd(12)}${deltaStr.padEnd(28)}${note}`);
   }
 
   if (macro.fx_impact_home != null && Math.abs(macro.fx_impact_home) >= 1) {
-    const color = macro.fx_impact_home > 0 ? pc.green : pc.red;
     const sign = macro.fx_impact_home > 0 ? '+' : '−';
+    const color = macro.fx_impact_home > 0 ? pc.green : pc.red;
     rows.push('');
     rows.push(`  ${pc.dim('FX impact on portfolio:')} ${color(`${sign}${fmtHomeAmount(macro.fx_impact_home)}`)} ${pc.dim('(today vs previous trading day)')}`);
   }
@@ -105,16 +116,16 @@ const renderMacro = (macro: BriefMacro | null): string[] => {
 };
 
 const stressColor = (label: string | null) =>
-  label === 'Low' ? pc.green
-    : label === 'Moderate' ? pc.cyan
-    : label === 'Elevated' ? pc.yellow
-    : label === 'Severe' || label === 'Critical' ? pc.red
+  label === 'Low' ? tierColor.good
+    : label === 'Moderate' ? (s: string) => s
+    : label === 'Elevated' ? tierColor.caution
+    : label === 'Severe' || label === 'Critical' ? tierColor.alert
     : pc.dim;
 
 const regimeColor = (bias: string | null) =>
-  bias === 'Risk-on bias' ? pc.green
-    : bias === 'Risk-off bias' ? pc.red
-    : bias === 'Mixed' ? pc.yellow
+  bias === 'Risk-on bias'  ? tierColor.good
+    : bias === 'Risk-off bias' ? tierColor.alert
+    : bias === 'Mixed'         ? tierColor.caution
     : pc.dim;
 
 const renderSignals = (signals: BriefSignals | null): string[] => {

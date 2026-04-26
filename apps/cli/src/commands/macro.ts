@@ -3,6 +3,22 @@ import pc from 'picocolors';
 import type { MacroResult, MacroUnit } from '@firma/fred';
 import { assembleMacro, readCachedMacro } from '../services/macro.ts';
 import { getDefaultCurrency } from '../config.ts';
+import { tierColor, deltaColor, type Tier, type Polarity } from '../utils/index.ts';
+
+// Per-indicator coloring spec.
+// `level` colors the current value; `polarity` colors the deltas.
+type Spec = { level: (v: number) => Tier; polarity: Polarity };
+
+const SPEC: Record<string, Spec> = {
+  vix:       { level: v => v < 15 ? 'good' : v < 20 ? 'neutral' : v < 30 ? 'caution' : 'alert', polarity: 'up_bad' },
+  ust10:     { level: () => 'neutral', polarity: 'up_bad' },                                            // for stock holders, rising rates = bad
+  curve:     { level: v => v > 0.25 ? 'good' : v > 0 ? 'neutral' : v > -0.5 ? 'caution' : 'alert', polarity: 'up_good' },
+  usd_index: { level: () => 'neutral', polarity: 'up_bad' },                                            // strong USD = headwind for US multinationals
+  hy_spread: { level: v => v < 3 ? 'good' : v < 4 ? 'neutral' : v < 5 ? 'caution' : 'alert', polarity: 'up_bad' },
+  breakeven: { level: v => v >= 1.8 && v <= 2.5 ? 'good' : v >= 1.5 && v <= 3 ? 'neutral' : 'caution', polarity: 'neutral' },
+  fed_funds: { level: () => 'neutral', polarity: 'neutral' },
+  fx:        { level: () => 'neutral', polarity: 'neutral' },                                           // direction depends on user POV
+};
 
 const fmtLevel = (v: number) => v.toFixed(2);
 const fmtPercent = (v: number) => `${v.toFixed(2)}%`;
@@ -13,23 +29,23 @@ const fmtPrice = (v: number) =>
 const fmtCurrent = (v: number, units: MacroUnit) =>
   units === 'percent' ? fmtPercent(v) : units === 'price' ? fmtPrice(v) : fmtLevel(v);
 
-const fmtDelta = (current: number | null, prior: number | null, units: MacroUnit): string => {
+const fmtSignedNum = (n: number, digits = 2) => `${n >= 0 ? '+' : '−'}${Math.abs(n).toFixed(digits)}`;
+
+const fmtDelta = (current: number | null, prior: number | null, units: MacroUnit, polarity: Polarity): string => {
   if (current == null || prior == null) return pc.dim('─');
   const diff = current - prior;
   if (Math.abs(diff) < 1e-9) return pc.dim('0');
-  const arrow = diff >= 0 ? '+' : '';
+  let txt: string;
   if (units === 'percent') {
     const bp = Math.round(diff * 100);
-    const txt = `${arrow}${bp}bp`;
-    return diff >= 0 ? pc.cyan(txt) : pc.yellow(txt);
-  }
-  if (units === 'price') {
+    txt = `${bp >= 0 ? '+' : '−'}${Math.abs(bp)}bp`;
+  } else if (units === 'price') {
     const pct = (diff / prior) * 100;
-    const txt = `${arrow}${pct.toFixed(2)}%`;
-    return diff >= 0 ? pc.cyan(txt) : pc.yellow(txt);
+    txt = `${fmtSignedNum(pct, 2)}%`;
+  } else {
+    txt = fmtSignedNum(diff, 2);
   }
-  const txt = `${arrow}${diff.toFixed(2)}`;
-  return diff >= 0 ? pc.cyan(txt) : pc.yellow(txt);
+  return deltaColor(polarity, diff)(txt);
 };
 
 const fmtAvg = (v: number | null, units: MacroUnit) =>
@@ -65,7 +81,7 @@ export const showMacroCommand = async ({ json = false, refresh = false }: { json
     return;
   }
 
-  const COL = { LABEL: 24, CUR: 12, D30: 10, D90: 10, AVG: 12 };
+  const COL = { LABEL: 24, CUR: 12, D30: 12, D90: 12, AVG: 12 };
 
   const header = [
     pc.dim('INDICATOR'.padEnd(COL.LABEL)),
@@ -77,12 +93,16 @@ export const showMacroCommand = async ({ json = false, refresh = false }: { json
   const divider = pc.dim('─'.repeat(COL.LABEL + COL.CUR + COL.D30 + COL.D90 + COL.AVG + 8));
 
   const renderRow = (r: MacroResult) => {
-    const cur = r.current != null ? fmtCurrent(r.current, r.units) : pc.dim('─');
+    const spec: Spec = SPEC[r.id] ?? { level: () => 'neutral', polarity: 'neutral' };
+    const curRaw = r.current != null ? fmtCurrent(r.current, r.units) : '─';
+    const tier = r.current != null ? spec.level(r.current) : 'neutral';
+    const cur = r.current != null ? tierColor[tier](curRaw) : pc.dim(curRaw);
+
     return [
       r.label.padEnd(COL.LABEL),
-      pc.bold(cur).padEnd(COL.CUR),
-      fmtDelta(r.current, r.prior_30d, r.units).padEnd(COL.D30),
-      fmtDelta(r.current, r.prior_90d, r.units).padEnd(COL.D90),
+      cur.padEnd(COL.CUR),
+      fmtDelta(r.current, r.prior_30d, r.units, spec.polarity).padEnd(COL.D30),
+      fmtDelta(r.current, r.prior_90d, r.units, spec.polarity).padEnd(COL.D90),
       fmtAvg(r.avg_5y, r.units).padEnd(COL.AVG),
     ].join('  ');
   };

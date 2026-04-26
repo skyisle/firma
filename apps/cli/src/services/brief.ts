@@ -1,6 +1,6 @@
 import { homedir } from 'os';
 import { join } from 'path';
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'fs';
+import { mkdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'fs';
 import { assembleBriefData, type BriefData } from '@firma/brief';
 import { getRepository } from '../db/index.ts';
 import { readConfig, getDefaultCurrency } from '../config.ts';
@@ -9,14 +9,26 @@ const CACHE_DIR = join(homedir(), '.firma', 'cache');
 const cachePath = (date: string) => join(CACHE_DIR, `brief-${date}.json`);
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
-export type {
-  BriefData, BriefHolding, BriefConcentration, BriefMover, BriefNewsItem,
-  BriefMacro, BriefSignals, BriefInsight, BriefEarnings,
-} from '@firma/brief';
+const dbPath = () => readConfig()?.db_path ?? join(homedir(), '.firma', 'firma.db');
+
+const mtimeOr = (path: string, fallback = 0): number => {
+  try { return statSync(path).mtimeMs; } catch { return fallback; }
+};
+
+// Cache is stale if any local data file (db or its WAL) was modified after the cache was written.
+const isCacheStale = (cacheFilePath: string): boolean => {
+  const cacheMs = mtimeOr(cacheFilePath);
+  if (cacheMs === 0) return true;
+  const db = dbPath();
+  return cacheMs < Math.max(mtimeOr(db), mtimeOr(`${db}-wal`));
+};
+
+export type { BriefData, BriefMacro, BriefSignals } from '@firma/brief';
 
 export const readCachedBrief = (date: string): BriefData | null => {
   const path = cachePath(date);
   if (!existsSync(path)) return null;
+  if (isCacheStale(path)) return null;
   try { return JSON.parse(readFileSync(path, 'utf-8')) as BriefData; }
   catch { return null; }
 };

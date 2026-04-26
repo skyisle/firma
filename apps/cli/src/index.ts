@@ -4,6 +4,7 @@ import { intro, outro, log } from '@clack/prompts';
 import pc from 'picocolors';
 
 import { syncCommand, syncFxCommand } from './commands/sync.ts';
+import { doctorCommand } from './commands/doctor.ts';
 import { addTxnCommand } from './commands/add.ts';
 import { editTxnCommand, editBalanceCommand, editFlowCommand } from './commands/edit.ts';
 import { deleteTxnCommand, deleteBalanceCommand, deleteFlowCommand } from './commands/delete.ts';
@@ -30,7 +31,7 @@ import { mcpInstallCommand } from './commands/mcp.ts';
 import { setConfigValue, readConfig } from './config.ts';
 import { checkForUpdate } from './services/update-check.ts';
 
-const CURRENT_VERSION = '0.10.0';
+const CURRENT_VERSION = '0.11.0';
 
 const jsonMode = process.argv.includes('--json');
 
@@ -355,6 +356,14 @@ sync
   .option('--json', 'Output result as JSON')
   .action(wrapMaybeJson('firma sync fx',
     (opts: { json?: boolean }) => syncFxCommand({ json: opts.json ?? false }),
+    (opts) => opts.json ?? false));
+
+program
+  .command('doctor')
+  .description('Check setup status — API keys, data, FX cache. Suggests next steps if anything\'s missing.')
+  .option('--json', 'Output result as JSON')
+  .action(wrapMaybeJson('firma doctor',
+    (opts: { json?: boolean }) => doctorCommand({ json: opts.json ?? false }),
     (opts) => opts.json ?? false));
 
 // ── config ─────────────────────────────────────────────

@@ -3,7 +3,7 @@ import pc from 'picocolors';
 import { getRepository } from '../db/index.ts';
 import { fetchFxRates } from '../services/fx.ts';
 import {
-  fmtAmount, fracBar, FALLBACK_RATES, currentPeriod, pickDisplayCurrency,
+  fracBar, FALLBACK_RATES, currentPeriod, pickDisplayCurrency,
   formatCurrencyValue, storedToUsdAtDate, usdToDisplayAtDate,
   type Currency,
 } from '../utils/index.ts';
@@ -245,7 +245,8 @@ const reportSettle = async (period: string | undefined, json: boolean, currency:
   }
 
   if (balEntries.length === 0 && flowEnts.length === 0) {
-    log.warn(`No data found. Run \`firma add monthly\`.`);
+    log.warn('No balance or flow data found for any period.');
+    log.info('Add data: ask Claude to import historical balances and cash flow, or run `firma add monthly` for one period.');
     return;
   }
 

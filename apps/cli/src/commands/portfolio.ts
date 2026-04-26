@@ -6,7 +6,7 @@ import { getRepository } from '../db/index.ts';
 import { syncPrices } from '../services/sync.ts';
 import { fetchFxRates } from '../services/fx.ts';
 import { readConfig } from '../config.ts';
-import { fracBar, fmtAmount, entryKrw, FALLBACK_RATES, CURRENCY_SYMBOL, formatCurrencyValue, storedToUsdAtDate, usdToDisplayAtDate, pickDisplayCurrency, stalenessLine, type Currency } from '../utils/index.ts';
+import { fracBar, FALLBACK_RATES, CURRENCY_SYMBOL, formatCurrencyValue, storedToUsdAtDate, usdToDisplayAtDate, pickDisplayCurrency, stalenessLine, type Currency } from '../utils/index.ts';
 
 const fmt = {
   usd: (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
@@ -60,7 +60,8 @@ export const showPortfolioCommand = async ({ json = false, sync = true, currency
 
   if (holdings.size === 0) {
     if (json) { process.stdout.write('[]\n'); return; }
-    log.warn('No transactions found. Run `firma add txn` to add your first trade.');
+    log.warn('No transactions found.');
+    log.info('First time? Tell Claude: "Here\'s my trade history [paste/CSV]. Set up firma." — or run `firma add txn` for a single trade. Try `firma doctor` to check your setup.');
     return;
   }
 

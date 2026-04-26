@@ -6,7 +6,7 @@ import { getRepository } from '../db/index.ts';
 import { fetchFxRates } from '../services/fx.ts';
 import { inputCategoryGroup, type EntryResult } from './ledger-input.ts';
 import {
-  fmtAmount, entryKrw, FALLBACK_RATES, CURRENCY_SYMBOL, formatCurrencyValue, storedToUsdAtDate, usdToDisplayAtDate,
+  FALLBACK_RATES, CURRENCY_SYMBOL, formatCurrencyValue, storedToUsdAtDate, usdToDisplayAtDate,
   currentPeriod, periodEndDate,
   pickDisplayCurrency, pickInputCurrency,
 } from '../utils/index.ts';
@@ -114,7 +114,8 @@ export const showBalanceCommand = async ({ json = false, period, currency }: { j
   }
 
   if (entries.length === 0) {
-    log.warn('No balance entries found. Run `firma add balance`.');
+    log.warn('No balance entries found.');
+    log.info('Tell Claude to import a net-worth spreadsheet, or run `firma add balance` for one period.');
     return;
   }
 

@@ -215,6 +215,7 @@ Your numbers never leave your machine.
 |---|---|
 | `firma sync` | Fetch latest prices (Finnhub) + FX rate history (FRED) |
 | `firma sync fx` | FX rate history only — incremental backfill from your earliest entry date |
+| `firma doctor` | Check setup status — API keys, data, FX cache; prints next steps if anything's missing |
 | `firma mcp install` | Register MCP server in Claude Desktop |
 | `firma config set finnhub-key KEY` | Set Finnhub API key |
 | `firma config set fred-key KEY` | Set FRED API key (free at fred.stlouisfed.org) |

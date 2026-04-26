@@ -2,13 +2,19 @@ import { log, note, spinner } from '@clack/prompts';
 import pc from 'picocolors';
 import { createFredClient, assembleRegime } from '@firma/fred';
 import { readConfig } from '../config.ts';
+import { tierColor } from '../utils/index.ts';
 
 const biasColor = (bias: string | null): ((s: string) => string) => {
-  if (bias === 'Risk-on bias')  return pc.green;
-  if (bias === 'Risk-off bias') return pc.red;
-  if (bias === 'Mixed')         return pc.yellow;
+  if (bias === 'Risk-on bias')  return tierColor.good;
+  if (bias === 'Risk-off bias') return tierColor.alert;
+  if (bias === 'Mixed')         return tierColor.caution;
   return pc.dim;
 };
+
+const signalMark = (bullish: boolean | null): string =>
+  bullish === true  ? tierColor.good('✓')
+    : bullish === false ? tierColor.alert('✗')
+    : pc.dim('·');
 
 export const showRegimeCommand = async ({ json = false }: { json?: boolean } = {}) => {
   const apiKey = readConfig()?.fred_api_key;
@@ -46,12 +52,7 @@ export const showRegimeCommand = async ({ json = false }: { json?: boolean } = {
     ? `${color(pc.bold(data.bias))}  ${pc.dim(`(${data.bullish_count} of ${known} signals risk-on)`)}`
     : pc.dim('Insufficient data');
 
-  const rows = data.signals.map(s => {
-    const mark = s.bullish === true  ? pc.green('✓')
-              : s.bullish === false ? pc.red('✗')
-              : pc.dim('·');
-    return `  ${mark}  ${s.detail}`;
-  });
+  const rows = data.signals.map(s => `  ${signalMark(s.bullish)}  ${s.detail}`);
 
   const body = [
     `${pc.dim('Bias:')}  ${headline}`,

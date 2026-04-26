@@ -1,6 +1,9 @@
-import { cancel, isCancel, select } from '@clack/prompts';
+import { cancel, isCancel, log, select } from '@clack/prompts';
 import { CURRENCY_OPTIONS, CURRENCY_SYMBOL, type Currency } from './currency.ts';
 import { getDefaultCurrency } from '../config.ts';
+
+const isInteractive = (): boolean =>
+  Boolean(process.stdin.isTTY && process.stdout.isTTY);
 
 export const guard = <T>(value: T | symbol): T => {
   if (isCancel(value)) { cancel('Cancelled'); process.exit(0); }
@@ -9,6 +12,11 @@ export const guard = <T>(value: T | symbol): T => {
 
 export const pickDisplayCurrency = async (explicit: string | undefined, json: boolean): Promise<Currency> => {
   if (json || explicit) return ((explicit ?? getDefaultCurrency()) as string).toUpperCase() as Currency;
+  if (!isInteractive()) {
+    const fallback = getDefaultCurrency().toUpperCase() as Currency;
+    log.info(`Non-interactive shell — using default currency ${fallback}. Pass --currency to override.`);
+    return fallback;
+  }
   return guard(await select({
     message: 'Display currency',
     options: CURRENCY_OPTIONS.map(c => ({ value: c, label: `${c}  (${CURRENCY_SYMBOL[c]})` })),
@@ -16,9 +24,15 @@ export const pickDisplayCurrency = async (explicit: string | undefined, json: bo
   })) as Currency;
 };
 
-export const pickInputCurrency = async (): Promise<Currency> =>
-  guard(await select({
+export const pickInputCurrency = async (): Promise<Currency> => {
+  if (!isInteractive()) {
+    const fallback = getDefaultCurrency().toUpperCase() as Currency;
+    log.info(`Non-interactive shell — using default currency ${fallback} for input.`);
+    return fallback;
+  }
+  return guard(await select({
     message: 'Enter amounts in',
     options: CURRENCY_OPTIONS.map(c => ({ value: c, label: `${c}  (${CURRENCY_SYMBOL[c]})` })),
     initialValue: getDefaultCurrency().toUpperCase() as Currency,
   })) as Currency;
+};

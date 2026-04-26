@@ -2,13 +2,14 @@ import { log, note, spinner } from '@clack/prompts';
 import pc from 'picocolors';
 import { createFredClient, assembleStressIndex } from '@firma/fred';
 import { readConfig } from '../config.ts';
+import { tierColor } from '../utils/index.ts';
 
 const labelColor = (label: string | null): ((s: string) => string) => {
-  if (label === 'Low')      return pc.green;
-  if (label === 'Moderate') return pc.cyan;
-  if (label === 'Elevated') return pc.yellow;
-  if (label === 'Severe')   return pc.red;
-  if (label === 'Critical') return (s: string) => pc.bold(pc.red(s));
+  if (label === 'Low')      return tierColor.good;
+  if (label === 'Moderate') return (s: string) => s;
+  if (label === 'Elevated') return tierColor.caution;
+  if (label === 'Severe')   return tierColor.alert;
+  if (label === 'Critical') return (s: string) => pc.bold(tierColor.alert(s));
   return pc.dim;
 };
 

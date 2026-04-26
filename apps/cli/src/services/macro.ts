@@ -6,7 +6,7 @@ import { readConfig } from '../config.ts';
 
 const CACHE_DIR = join(homedir(), '.firma', 'cache');
 
-export type MacroData = {
+type MacroData = {
   date: string;
   generated_at: string;
   home_currency: string;

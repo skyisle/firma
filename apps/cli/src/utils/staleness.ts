@@ -4,9 +4,9 @@ const MIN = 60 * 1000;
 const HR  = 60 * MIN;
 const DAY = 24 * HR;
 
-export type StaleLevel = 'fresh' | 'aging' | 'stale' | 'missing';
+type StaleLevel = 'fresh' | 'aging' | 'stale' | 'missing';
 
-export const stalenessLevel = (syncedAt: string | null | undefined): StaleLevel => {
+const stalenessLevel = (syncedAt: string | null | undefined): StaleLevel => {
   if (!syncedAt) return 'missing';
   const ageMs = Date.now() - new Date(syncedAt).getTime();
   if (ageMs <= HR)   return 'fresh';

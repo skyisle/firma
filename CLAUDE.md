@@ -99,6 +99,7 @@ firma delete snapshot [date]       # deletes all holdings for that date
 
 # actions
 firma brief                   # daily brief: movers + news + earnings (cached per day)
+firma doctor                  # check setup status (keys, data, FX cache); suggests next steps
 firma sync                    # prices (Finnhub) + FX history (FRED) — default
 firma sync fx                 # FX history only — increment-only backfill
 firma mcp install
@@ -124,6 +125,7 @@ fetch_fred_series / search_fred_series  # raw FRED data layer
 sync_fx_rates                       # backfill historical FX rate cache (KRW/JPY/EUR/CNY/GBP per USD)
 get_fx_rate                         # lookup historical FX rate for a date
 show_fx_history                     # inspect cached FX series (coverage summary or per-currency)
+setup_status                        # diagnostic: keys/data/cache + next_steps array
 get_brief                           # daily brief (cached per day)
 report_balance / report_flow / report_combined / report_settle
 sync_prices
