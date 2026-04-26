@@ -3,7 +3,7 @@ import pc from 'picocolors';
 import { getRepository } from '../db/index.ts';
 import { fetchFxRates } from '../services/fx.ts';
 import {
-  fmtAmount, entryKrw, fracBar, FALLBACK_RATES, currentPeriod, type Currency,
+  fmtAmount, entryKrw, fracBar, FALLBACK_RATES, currentPeriod, pickDisplayCurrency, type Currency,
 } from '../utils/index.ts';
 import type { BalanceEntry, FlowEntry } from '@firma/db';
 
@@ -198,9 +198,20 @@ const renderFlowBreakdown = (entries: FlowEntry[], year: string, fmt: (v: number
   ].join('\n');
 };
 
-const reportSettle = async (period: string | undefined, json: boolean, currency: Currency = 'USD') => {
+const reportSettle = async (period: string | undefined, json: boolean, currency: Currency) => {
   const repo = getRepository();
-  const targetPeriod = period ?? currentPeriod();
+
+  let targetPeriod = period ?? currentPeriod();
+  if (!period) {
+    const has = (p: string) =>
+      repo.balance.getByPeriod(p).length > 0 || repo.flow.getByPeriod(p).length > 0;
+    if (!has(targetPeriod)) {
+      const balPeriods = repo.balance.getPeriods();
+      const flowPeriods = repo.flow.getPeriods();
+      const latest = [...new Set([...balPeriods, ...flowPeriods])].sort().at(-1);
+      if (latest) targetPeriod = latest;
+    }
+  }
 
   const balEntries = repo.balance.getByPeriod(targetPeriod);
   const flowEnts   = repo.flow.getByPeriod(targetPeriod);
@@ -215,7 +226,7 @@ const reportSettle = async (period: string | undefined, json: boolean, currency:
   }
 
   if (balEntries.length === 0 && flowEnts.length === 0) {
-    log.warn(`No data for ${targetPeriod}. Run \`firma add monthly\`.`);
+    log.warn(`No data found. Run \`firma add monthly\`.`);
     return;
   }
 
@@ -248,18 +259,19 @@ const reportSettle = async (period: string | undefined, json: boolean, currency:
 
 export const reportCommand = async (
   target?: string,
-  currency: Currency = 'USD',
+  currency?: string,
   { json = false, period }: { json?: boolean; period?: string } = {},
 ) => {
-  if (target === 'settle') return reportSettle(period, json, currency);
-
-  const showBalance = !target || target === 'balance';
-  const showFlow    = !target || target === 'flow';
-
-  if (target && target !== 'balance' && target !== 'flow') {
+  if (target && target !== 'balance' && target !== 'flow' && target !== 'settle') {
     log.error(`Unknown target "${target}". Use: balance, flow, settle, or omit for combined.`);
     return;
   }
+
+  const cur = await pickDisplayCurrency(currency, json);
+  if (target === 'settle') return reportSettle(period, json, cur);
+
+  const showBalance = !target || target === 'balance';
+  const showFlow    = !target || target === 'flow';
 
   const repo = getRepository();
   const [rates, balanceData, flowData] = await Promise.all([
@@ -268,8 +280,8 @@ export const reportCommand = async (
     showFlow    ? Promise.resolve(repo.flow.getAll())    : Promise.resolve([]),
   ]);
 
-  const rate = (rates[currency] ?? FALLBACK_RATES[currency]) as number;
-  const fmt = (v: number) => fmtAmount(v, currency, rate);
+  const rate = (rates[cur] ?? FALLBACK_RATES[cur]) as number;
+  const fmt = (v: number) => fmtAmount(v, cur, rate);
   const currentYear = new Date().getFullYear().toString();
 
   if (json) {

@@ -19,6 +19,7 @@
   "devDependencies": {
     "@firma/db": "workspace:*",
     "@firma/finnhub": "workspace:*",
+    "@firma/fred": "workspace:*",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22",
     "tsup": "^8.4.0",

@@ -17,15 +17,17 @@ import { showInsiderCommand } from './commands/insider.ts';
 import { showFinancialsCommand } from './commands/financials.ts';
 import { showEarningsCommand } from './commands/earnings.ts';
 import { showDividendCommand } from './commands/dividend.ts';
+import { showConcentrationCommand } from './commands/concentration.ts';
+import { showMacroCommand } from './commands/macro.ts';
+import { briefCommand } from './commands/brief.ts';
 import { reportCommand } from './commands/report.ts';
-import type { Currency } from './utils/index.ts';
 import { addSnapshotCommand, editSnapshotCommand, deleteSnapshotCommand, showSnapshotCommand } from './commands/snapshot.ts';
 
 import { mcpInstallCommand } from './commands/mcp.ts';
-import { setConfigValue, readConfig, getDefaultCurrency } from './config.ts';
+import { setConfigValue, readConfig } from './config.ts';
 import { checkForUpdate } from './services/update-check.ts';
 
-const CURRENT_VERSION = '0.5.0';
+const CURRENT_VERSION = '0.6.0';
 
 const jsonMode = process.argv.includes('--json');
 
@@ -208,6 +210,24 @@ show
     (opts) => opts.json ?? false));
 
 show
+  .command('concentration')
+  .alias('c')
+  .description('Portfolio concentration by ticker / currency / sector / country (HHI)')
+  .option('--json', 'Output as JSON')
+  .action(wrapMaybeJson('firma show concentration',
+    (opts: { json?: boolean }) => showConcentrationCommand({ json: opts.json ?? false }),
+    (opts) => opts.json ?? false));
+
+show
+  .command('macro')
+  .description('Curated FRED macro snapshot: VIX, yields, USD, credit spread, inflation, fed funds, FX (cached per day)')
+  .option('--json',    'Output as JSON')
+  .option('--refresh', 'Force regenerate, bypass today\'s cache')
+  .action(wrapMaybeJson('firma show macro',
+    (opts: { json?: boolean; refresh?: boolean }) => showMacroCommand({ json: opts.json ?? false, refresh: opts.refresh ?? false }),
+    (opts) => opts.json ?? false));
+
+show
   .command('snapshot [ticker]')
   .description('Portfolio value history (optionally filtered by ticker)')
   .option('--from <date>',             'Start date in YYYY-MM-DD format')
@@ -229,7 +249,7 @@ program
   .option('--json',                    'Output raw data as JSON')
   .action(wrapMaybeJson('firma report',
     (target: string | undefined, opts: { currency?: string; period?: string; json?: boolean }) =>
-      reportCommand(target, (opts.currency ?? getDefaultCurrency()).toUpperCase() as Currency, { json: opts.json ?? false, period: opts.period }),
+      reportCommand(target, opts.currency, { json: opts.json ?? false, period: opts.period }),
     (_t, opts) => opts.json ?? false));
 
 // ── edit ───────────────────────────────────────────────
@@ -280,6 +300,15 @@ del
 
 // ── actions ────────────────────────────────────────────
 program
+  .command('brief')
+  .description('Daily portfolio brief: movers, news, upcoming earnings (cached per day)')
+  .option('--json',    'Output as JSON')
+  .option('--refresh', 'Force regenerate, bypass today\'s cache')
+  .action(wrapMaybeJson('firma brief',
+    (opts: { json?: boolean; refresh?: boolean }) => briefCommand({ json: opts.json ?? false, refresh: opts.refresh ?? false }),
+    (opts) => opts.json ?? false));
+
+program
   .command('sync')
   .description('Sync latest stock prices from Finnhub')
   .option('--json', 'Output result as JSON')
@@ -292,16 +321,17 @@ const config = program.command('config').description('Manage local configuration
 
 config
   .command('set <key> <value>')
-  .description('Set a config value (keys: finnhub-key, db-path)')
+  .description('Set a config value (keys: finnhub-key, fred-key, db-path, currency)')
   .action((key: string, value: string) => {
-    const keyMap: Record<string, 'finnhub_api_key' | 'db_path' | 'currency'> = {
+    const keyMap: Record<string, 'finnhub_api_key' | 'fred_api_key' | 'db_path' | 'currency'> = {
       'finnhub-key': 'finnhub_api_key',
+      'fred-key':    'fred_api_key',
       'db-path':     'db_path',
       'currency':    'currency',
     };
     const mapped = keyMap[key];
     if (!mapped) {
-      log.error(`Unknown key "${key}". Valid keys: finnhub-key, db-path`);
+      log.error(`Unknown key "${key}". Valid keys: finnhub-key, fred-key, db-path, currency`);
       process.exit(1);
     }
     setConfigValue(mapped, value);
@@ -310,11 +340,13 @@ config
 
 config
   .command('get [key]')
-  .description('Show config values (keys: finnhub-key, db-path)')
+  .description('Show config values (keys: finnhub-key, fred-key, db-path, currency)')
   .action((key?: string) => {
     const cfg = readConfig() ?? {};
     if (key === 'finnhub-key') {
       log.message(cfg.finnhub_api_key ? pc.dim('(set)') : pc.dim('(not set)'));
+    } else if (key === 'fred-key') {
+      log.message(cfg.fred_api_key ? pc.dim('(set)') : pc.dim('(not set)'));
     } else if (key === 'db-path') {
       log.message(cfg.db_path ?? pc.dim('~/.firma/firma.db (default)'));
     } else if (key === 'currency') {
@@ -322,6 +354,7 @@ config
     } else {
       log.message([
         `finnhub-key  ${cfg.finnhub_api_key ? pc.green('set') : pc.dim('not set')}`,
+        `fred-key     ${cfg.fred_api_key ? pc.green('set') : pc.dim('not set')}`,
         `db-path      ${cfg.db_path ?? pc.dim('~/.firma/firma.db (default)')}`,
         `currency     ${cfg.currency ?? pc.dim('USD (default)')}`,
       ].join('\n'));

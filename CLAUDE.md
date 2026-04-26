@@ -14,6 +14,7 @@ apps/
 packages/
   db/        — @firma/db       Drizzle schema + repository contracts (shared)
   finnhub/   — @firma/finnhub  Finnhub API client (shared)
+  fred/      — @firma/fred     FRED (St. Louis Fed) API client + macro snapshot helper
   utils/     — @firma/utils    pure helpers + ledger category defs (shared)
 ```
 
@@ -32,6 +33,7 @@ packages/
 - **Transactions as source of truth** — holdings are derived via aggregation, no holdings table
 - **Local SQLite** — all data stored in `~/.firma/firma.db` via better-sqlite3 + Drizzle ORM
 - **Finnhub** — stock price provider; API key stored in `~/.firma/config.json`
+- **FRED** — macro data provider (rates, yields, FX, inflation); API key stored in `~/.firma/config.json`
 
 ## Build: MCP bundling
 
@@ -50,6 +52,7 @@ Three verb groups: `add` (input), `show` (read), `report` (aggregated).
 ```
 # config
 firma config set finnhub-key <key>
+firma config set fred-key <key>
 firma config get [key]
 
 # add — interactive entry
@@ -67,6 +70,7 @@ firma show flow    [-p YYYY-MM]
 firma show snapshot [ticker]   # portfolio value history; --from/--to for date range
 firma show dividend            # estimated annual income + per-ticker yield
 firma show concentration       # HHI by ticker / currency / sector / country
+firma show macro               # FRED macro snapshot (8 indicators + dynamic FX)
 firma show news <ticker>
 firma show insider <ticker>
 firma show financials <ticker>
@@ -108,6 +112,8 @@ add_snapshot / edit_snapshot / delete_snapshot / show_snapshot
 show_portfolio / show_txns / show_balance / show_flow / show_prices
 show_dividend / show_news / show_insider / show_financials / show_earnings
 show_concentration                  # HHI by dimension
+show_macro                          # curated FRED macro snapshot (8 indicators + FX)
+fetch_fred_series / search_fred_series  # raw FRED data layer
 get_brief                           # daily brief (cached per day)
 report_balance / report_flow / report_combined / report_settle
 sync_prices

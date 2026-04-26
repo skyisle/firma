@@ -7,6 +7,7 @@ const CONFIG_PATH = join(CONFIG_DIR, 'config.json');
 
 type Config = {
   finnhub_api_key?: string;
+  fred_api_key?: string;
   db_path?: string;
   currency?: string;
   update_check_at?: number;

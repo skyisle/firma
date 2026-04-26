@@ -1,0 +1,18 @@
+{
+  "name": "@firma/fred",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --no-splitting"
+  },
+  "devDependencies": {
+    "tsup": "^8.4.0",
+    "typescript": "^5"
+  }
+}

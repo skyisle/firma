@@ -14,8 +14,8 @@ export const FALLBACK_RATES: Record<string, number> = {
 export const fmtAmount = (amountKrw: number, currency: Currency, rate: number) => {
   const v = amountKrw * rate;
   const sym = CURRENCY_SYMBOL[currency];
-  if (currency === 'KRW') return `${sym}${Math.round(v / 10000).toLocaleString('ko-KR')}만`;
-  if (currency === 'JPY') return `${sym}${Math.round(v).toLocaleString('ja-JP')}`;
+  if (currency === 'KRW') return `${sym}${Math.round(v).toLocaleString('en-US')}`;
+  if (currency === 'JPY') return `${sym}${Math.round(v).toLocaleString('en-US')}`;
   return `${sym}${v.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 };
 

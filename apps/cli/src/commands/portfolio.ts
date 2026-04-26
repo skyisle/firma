@@ -4,7 +4,7 @@ import { getRepository } from '../db/index.ts';
 import { aggregateHoldings } from '@firma/db';
 import { syncPrices } from '../services/sync.ts';
 import { fetchFxRates } from '../services/fx.ts';
-import { fracBar, fmtAmount, entryKrw, FALLBACK_RATES, pickDisplayCurrency } from '../utils/index.ts';
+import { fracBar, fmtAmount, entryKrw, FALLBACK_RATES, pickDisplayCurrency, stalenessLine } from '../utils/index.ts';
 
 const fmt = {
   usd: (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
@@ -114,9 +114,7 @@ export const showPortfolioCommand = async ({ json = false, sync = true, currency
     `${pc.dim('P&L'.padEnd(LBL))}${colorPnl(totalPnl, `${fmt.usd(totalPnl)}  ${fmt.pct(totalPnlPct)}`)}`,
   ].join('\n');
 
-  const lastSynced = lastSyncedAt
-    ? `\n${pc.dim('Synced'.padEnd(LBL) + new Date(lastSyncedAt).toLocaleString('en-US'))}`
-    : `\n${pc.dim('Not synced — run `firma sync`')}`;
+  const lastSynced = `\n${stalenessLine(lastSyncedAt)}`;
 
   note(`${header}\n${divider}\n${rows.join('\n')}\n${divider}\n${summary}${lastSynced}`, 'Portfolio');
 
@@ -184,9 +182,14 @@ export const showPortfolioCommand = async ({ json = false, sync = true, currency
           return `  ${(SUB_LABEL[sub] ?? sub).padEnd(14)}  ${bar}  ${fmt2(amt)}  ${pc.dim(`${(pct * 100).toFixed(1)}%`)}`;
         });
 
+      const portfolioMvKrw = entryKrw(totalValue, 'USD', rates);
+      const portfolioMvDisplay = cur === 'USD'
+        ? pc.dim(fmt.usd(totalValue))
+        : `${pc.dim(fmt2(portfolioMvKrw))}  ${pc.dim(`(≈ ${fmt.usd(totalValue)})`)}`;
+
       lines.push('');
       lines.push(`  ${'Net Worth'.padEnd(14)}  ${pc.dim('─'.repeat(BAR_W + 2))}  ${pc.bold(fmt2(netWorth))}  ${pc.dim(`(${latestPeriod})`)}`);
-      lines.push(`  ${pc.dim('Portfolio MV'.padEnd(14))}  ${pc.dim('─'.repeat(BAR_W + 2))}  ${pc.dim(fmt.usd(totalValue) + ' USD')}`);
+      lines.push(`  ${pc.dim('Portfolio MV'.padEnd(14))}  ${pc.dim('─'.repeat(BAR_W + 2))}  ${portfolioMvDisplay}`);
 
       note(lines.join('\n'), 'Net Worth Breakdown');
     }

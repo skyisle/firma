@@ -8,7 +8,7 @@ import { mkdirSync, readFileSync } from 'fs';
 
 const schema = { transactions, balanceEntries, flowEntries, prices, portfolioSnapshots };
 
-type Config = { db_path?: string; finnhub_api_key?: string };
+type Config = { db_path?: string; finnhub_api_key?: string; fred_api_key?: string };
 
 const readConfig = (): Config => {
   try {
@@ -79,5 +79,6 @@ export const getDb = () => {
 };
 
 export const getFinnhubKey = (): string | undefined => readConfig().finnhub_api_key;
+export const getFredKey    = (): string | undefined => readConfig().fred_api_key;
 
 export { transactions, balanceEntries, flowEntries, prices, portfolioSnapshots };

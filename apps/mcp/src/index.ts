@@ -5,8 +5,9 @@ import { z } from 'zod';
 import { eq, asc, and, gte, lte } from 'drizzle-orm';
 import { createFinnhubClient } from '@firma/finnhub';
 import type { FinancialLineItem, FinancialPeriod } from '@firma/finnhub';
+import { createFredClient, assembleMacroSnapshot } from '@firma/fred';
 import {
-  getDb, getFinnhubKey,
+  getDb, getFinnhubKey, getFredKey,
   transactions, balanceEntries, flowEntries, prices, portfolioSnapshots,
   aggregateHoldings, getActiveTickers,
 } from './db.ts';
@@ -15,7 +16,7 @@ const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
 
 const server = new McpServer({
   name: 'firma',
-  version: '0.5.0',
+  version: '0.6.0',
 });
 
 
@@ -238,6 +239,143 @@ server.tool(
   async () => {
     const db = getDb();
     return ok(db.select().from(prices).all());
+  },
+);
+
+server.tool(
+  'get_brief',
+  'Daily portfolio brief: today\'s movers, news from last 24h, upcoming earnings (next 14d). Cached per day on disk; same-day calls return the cache. Pass refresh=true to bypass cache.',
+  {
+    refresh: z.boolean().default(false).describe('Force regenerate, bypass today\'s cache'),
+  },
+  async ({ refresh }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const future = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
+
+    const cacheDir = `${process.env.HOME ?? ''}/.firma/cache`;
+    const cachePath = `${cacheDir}/brief-${today}.json`;
+    const fs = await import('fs');
+
+    if (!refresh && fs.existsSync(cachePath)) {
+      try { return ok(JSON.parse(fs.readFileSync(cachePath, 'utf-8'))); }
+      catch { /* fall through to regen */ }
+    }
+
+    const db = getDb();
+    const txns = db.select().from(transactions).all();
+    const holdings = aggregateHoldings(txns);
+    const tickers = getActiveTickers(txns);
+    const priceMap = new Map(db.select().from(prices).all().map(p => [p.ticker, p]));
+
+    const positions = tickers.map(t => {
+      const h = holdings.get(t)!;
+      const p = priceMap.get(t);
+      return {
+        ticker: t,
+        current_price:  p?.current_price  ?? 0,
+        change_percent: p?.change_percent ?? 0,
+        market_value:   (p?.current_price ?? 0) * h.shares,
+      };
+    });
+
+    const totalValue = positions.reduce((s, p) => s + p.market_value, 0);
+    const movables = positions.filter(p => p.current_price > 0);
+    const winners = [...movables].sort((a, b) => b.change_percent - a.change_percent).slice(0, 3)
+      .filter(p => p.change_percent > 0).map(({ ticker, change_percent, current_price }) => ({ ticker, change_percent, current_price }));
+    const losers  = [...movables].sort((a, b) => a.change_percent - b.change_percent).slice(0, 3)
+      .filter(p => p.change_percent < 0).map(({ ticker, change_percent, current_price }) => ({ ticker, change_percent, current_price }));
+
+    const apiKey = getFinnhubKey();
+    let news: Array<{ ticker: string; headline: string; source: string; published_at: number; url: string }> = [];
+    let earnings_upcoming: unknown[] = [];
+
+    if (apiKey && tickers.length > 0) {
+      const client = createFinnhubClient(apiKey);
+      const newsResults = await Promise.all(
+        tickers.map(t =>
+          client.getCompanyNews(t, yesterday, today)
+            .then(items => items.slice(0, 2).map(n => ({
+              ticker: t, headline: n.headline, source: n.source, published_at: n.datetime, url: n.url,
+            })))
+            .catch(() => [] as typeof news),
+        ),
+      );
+      news = newsResults.flat().sort((a, b) => b.published_at - a.published_at);
+
+      const earningsResults = await Promise.all(
+        tickers.map(t =>
+          client.getEarningsCalendar(today, future, t)
+            .then(r => r.earningsCalendar ?? [])
+            .catch(() => []),
+        ),
+      );
+      earnings_upcoming = earningsResults.flat().sort((a: { date: string }, b: { date: string }) => a.date.localeCompare(b.date));
+    }
+
+    const data = {
+      date: today,
+      generated_at: new Date().toISOString(),
+      portfolio: { total_value_usd: totalValue, holdings_count: holdings.size },
+      movers: { winners, losers },
+      news,
+      earnings_upcoming,
+    };
+
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.writeFileSync(cachePath, JSON.stringify(data, null, 2));
+    return ok(data);
+  },
+);
+
+server.tool(
+  'show_concentration',
+  'Portfolio concentration measured by Herfindahl-Hirschman Index (HHI) across ticker, currency, sector, and country dimensions. HHI ranges 0–10000; >2500 is high, >5000 very high. Returns top contributors per dimension.',
+  {},
+  async () => {
+    const db = getDb();
+    const txns = db.select().from(transactions).all();
+    const holdings = aggregateHoldings(txns);
+    if (holdings.size === 0) return ok({});
+
+    const priceMap = new Map(db.select().from(prices).all().map(p => [p.ticker, p]));
+
+    const positions = [...holdings.entries()].map(([ticker, h]) => {
+      const p = priceMap.get(ticker);
+      const marketValue = p ? p.current_price * h.shares : 0;
+      return {
+        ticker, marketValue,
+        currency: p?.currency ?? 'USD',
+        sector:   p?.sector   ?? 'Unknown',
+        country:  p?.country  ?? 'Unknown',
+      };
+    }).filter(p => p.marketValue > 0);
+
+    const hhi = (slices: { value: number }[]) => {
+      const total = slices.reduce((s, x) => s + x.value, 0);
+      if (total <= 0) return 0;
+      return Math.round(slices.reduce((s, { value }) => {
+        const p = value / total;
+        return s + p * p * 10000;
+      }, 0));
+    };
+
+    const groupBy = (keyOf: (p: typeof positions[number]) => string) => {
+      const map = positions.reduce((m, p) => m.set(keyOf(p), (m.get(keyOf(p)) ?? 0) + p.marketValue), new Map<string, number>());
+      const slices = [...map.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+      const total = slices.reduce((s, x) => s + x.value, 0);
+      return {
+        hhi: hhi(slices),
+        slices: slices.map(s => ({ label: s.label, value: s.value, pct: total > 0 ? (s.value / total) * 100 : 0 })),
+      };
+    };
+
+    return ok({
+      by_ticker:   groupBy(p => p.ticker),
+      by_currency: groupBy(p => p.currency),
+      by_sector:   groupBy(p => p.sector),
+      by_country:  groupBy(p => p.country),
+    });
   },
 );
 
@@ -821,6 +959,72 @@ server.tool(
       return ok(results.flat().sort((a, b) => a.date.localeCompare(b.date)));
     } catch (e) {
       return err(e instanceof Error ? e.message : 'Failed to fetch earnings');
+    }
+  },
+);
+
+
+server.tool(
+  'fetch_fred_series',
+  'Fetch a FRED (Federal Reserve Economic Data) time series by ID. Returns metadata + observations. Common series: VIXCLS (VIX), DGS10 (10Y Treasury), T10Y2Y (yield curve), DTWEXBGS (Dollar Index), FEDFUNDS, CPIAUCSL, UNRATE, BAMLH0A0HYM2 (HY spread), DEXKOUS (KRW/USD), DEXJPUS (JPY/USD), DEXUSEU (USD/EUR — invert for EUR/USD).',
+  {
+    series_id: z.string().describe('FRED series ID (e.g. "VIXCLS", "DGS10", "FEDFUNDS")'),
+    from:      z.string().optional().describe('Start date YYYY-MM-DD (inclusive)'),
+    to:        z.string().optional().describe('End date YYYY-MM-DD (inclusive)'),
+    limit:     z.number().int().positive().optional().describe('Max observations to return'),
+  },
+  async ({ series_id, from, to, limit }) => {
+    const apiKey = getFredKey();
+    if (!apiKey) return err('FRED API key not set. Run: firma config set fred-key <your-key>');
+    try {
+      const client = createFredClient(apiKey);
+      const data = await client.fetchSeries(series_id, { from, to, limit });
+      return ok(data);
+    } catch (e) {
+      return err(e instanceof Error ? e.message : 'Failed to fetch FRED series');
+    }
+  },
+);
+
+server.tool(
+  'show_macro',
+  'Curated macro snapshot (8 indicators: VIX, 10Y Treasury, yield curve, USD index, HY credit spread, breakeven inflation, Fed funds, plus FX vs user\'s home currency). Each indicator has current value, 30d/90d delta, and 5y average. The home_currency arg drives the FX series selection (USD = no FX line).',
+  {
+    home_currency: z.string().default('USD').describe('User\'s home currency: USD/KRW/EUR/JPY/CNY/GBP'),
+  },
+  async ({ home_currency }) => {
+    const apiKey = getFredKey();
+    if (!apiKey) return err('FRED API key not set. Run: firma config set fred-key <your-key>');
+    try {
+      const client = createFredClient(apiKey);
+      const indicators = await assembleMacroSnapshot(client, home_currency);
+      return ok({
+        generated_at: new Date().toISOString(),
+        home_currency: home_currency.toUpperCase(),
+        indicators,
+      });
+    } catch (e) {
+      return err(e instanceof Error ? e.message : 'Failed to fetch macro snapshot');
+    }
+  },
+);
+
+server.tool(
+  'search_fred_series',
+  'Search the FRED catalog (800K+ economic time series) by keyword. Returns series IDs ranked by popularity. Use this when you don\'t know the exact series_id for an indicator.',
+  {
+    query: z.string().describe('Search keywords (e.g. "treasury yield", "korea unemployment", "high yield spread")'),
+    limit: z.number().int().min(1).max(100).default(20).describe('Max results (default 20)'),
+  },
+  async ({ query, limit }) => {
+    const apiKey = getFredKey();
+    if (!apiKey) return err('FRED API key not set. Run: firma config set fred-key <your-key>');
+    try {
+      const client = createFredClient(apiKey);
+      const results = await client.searchSeries(query, limit);
+      return ok(results);
+    } catch (e) {
+      return err(e instanceof Error ? e.message : 'Failed to search FRED');
     }
   },
 );
