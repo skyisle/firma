@@ -34,7 +34,10 @@ jobs:
         run: yarn install
 
       - name: Build packages
-        run: yarn workspace @firma/finnhub build
+        run: |
+          yarn workspace @firma/finnhub build
+          yarn workspace @firma/fred build
+          yarn workspace @firma/brief build
 
       - name: Build CLI
         run: yarn workspace firma-app build
