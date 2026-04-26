@@ -1,0 +1,27 @@
+name: Welcome first-time contributors
+
+on:
+  pull_request_target:
+    types: [opened]
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  welcome:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/first-interaction@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          pr-message: |
+            Thanks for your first PR — really appreciate it! 🙌
+
+            If you have a moment: where did you hear about Firma, and what drew you to it? Even one line helps a lot. You can drop it here or in [Discussions](https://github.com/evan-moon/firma/discussions).
+          issue-message: |
+            Thanks for opening your first issue — this is genuinely helpful! 🙌
+
+            If you have a moment: where did you hear about Firma, and what drew you to it? Even one line helps a lot. You can drop it here or in [Discussions](https://github.com/evan-moon/firma/discussions).
