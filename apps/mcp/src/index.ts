@@ -5,18 +5,67 @@ import { z } from 'zod';
 import { eq, asc, and, gte, lte } from 'drizzle-orm';
 import { createFinnhubClient } from '@firma/finnhub';
 import type { FinancialLineItem, FinancialPeriod } from '@firma/finnhub';
-import { createFredClient, assembleMacroSnapshot } from '@firma/fred';
+import { createFredClient, assembleMacroSnapshot, FX_BY_CURRENCY } from '@firma/fred';
 import {
   getDb, getFinnhubKey, getFredKey,
   transactions, balanceEntries, flowEntries, prices, portfolioSnapshots,
   aggregateHoldings, getActiveTickers,
 } from './db.ts';
 
+type BriefMacroIndicator = {
+  id: string; label: string; series_id: string; units: 'percent' | 'level' | 'price'; invert?: boolean;
+  current: number | null; prior_1d: number | null;
+  latest_date: string | null; prior_date: string | null;
+};
+
+const assembleBriefMacro = async (homeCurrency: string, portfolioUsd: number) => {
+  const apiKey = getFredKey();
+  if (!apiKey) return null;
+
+  const client = createFredClient(apiKey);
+  const fx = FX_BY_CURRENCY[homeCurrency.toUpperCase()];
+  const inds: { id: string; label: string; series_id: string; units: 'percent' | 'level' | 'price'; invert?: boolean }[] = [
+    { id: 'vix',   label: 'VIX',                series_id: 'VIXCLS', units: 'level' },
+    { id: 'ust10', label: '10Y Treasury Yield', series_id: 'DGS10',  units: 'percent' },
+  ];
+  if (fx) inds.push(fx);
+
+  const fromDate = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
+  const indicators: BriefMacroIndicator[] = await Promise.all(inds.map(async (ind) => {
+    try {
+      const obs = await client.fetchObservations(ind.series_id, { from: fromDate });
+      const valid = obs.filter((o): o is { date: string; value: number } => o.value != null);
+      if (valid.length === 0) {
+        return { ...ind, current: null, prior_1d: null, latest_date: null, prior_date: null };
+      }
+      const apply = ind.invert ? (v: number) => 1 / v : (v: number) => v;
+      const latest = valid.at(-1)!;
+      const prior = valid.length > 1 ? valid[valid.length - 2] : null;
+      return {
+        ...ind,
+        current: apply(latest.value),
+        prior_1d: prior ? apply(prior.value) : null,
+        latest_date: latest.date,
+        prior_date: prior?.date ?? null,
+      };
+    } catch {
+      return { ...ind, current: null, prior_1d: null, latest_date: null, prior_date: null };
+    }
+  }));
+
+  const fxResult = indicators.find(r => r.id === 'fx');
+  const fx_impact_home = fxResult && fxResult.current != null && fxResult.prior_1d != null
+    ? portfolioUsd * (fxResult.current - fxResult.prior_1d)
+    : null;
+
+  return { home_currency: homeCurrency.toUpperCase(), indicators, fx_impact_home };
+};
+
 const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
 
 const server = new McpServer({
   name: 'firma',
-  version: '0.6.0',
+  version: '0.7.0',
 });
 
 
@@ -244,11 +293,12 @@ server.tool(
 
 server.tool(
   'get_brief',
-  'Daily portfolio brief: today\'s movers, news from last 24h, upcoming earnings (next 14d). Cached per day on disk; same-day calls return the cache. Pass refresh=true to bypass cache.',
+  'Daily portfolio brief: today\'s movers, news from last 24h, upcoming earnings (next 14d), and macro context (VIX, 10Y Treasury, plus FX vs home_currency with portfolio impact). Cached per day on disk; same-day calls return the cache. Pass refresh=true to bypass cache.',
   {
     refresh: z.boolean().default(false).describe('Force regenerate, bypass today\'s cache'),
+    home_currency: z.string().default('USD').describe('User\'s home currency for FX context (USD/KRW/EUR/JPY/CNY/GBP). USD = no FX line.'),
   },
-  async ({ refresh }) => {
+  async ({ refresh, home_currency }) => {
     const today = new Date().toISOString().slice(0, 10);
     const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
     const future = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
@@ -313,6 +363,8 @@ server.tool(
       earnings_upcoming = earningsResults.flat().sort((a: { date: string }, b: { date: string }) => a.date.localeCompare(b.date));
     }
 
+    const macro = await assembleBriefMacro(home_currency, totalValue);
+
     const data = {
       date: today,
       generated_at: new Date().toISOString(),
@@ -320,6 +372,7 @@ server.tool(
       movers: { winners, losers },
       news,
       earnings_upcoming,
+      macro,
     };
 
     fs.mkdirSync(cacheDir, { recursive: true });

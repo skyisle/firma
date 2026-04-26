@@ -1,9 +1,11 @@
 import { log, note, spinner } from '@clack/prompts';
 import pc from 'picocolors';
-import { assembleBrief, readCachedBrief, type BriefData } from '../services/brief.ts';
+import { assembleBrief, readCachedBrief, type BriefData, type BriefMacro } from '../services/brief.ts';
+import { CURRENCY_SYMBOL, type Currency } from '../utils/index.ts';
 
 const fmtUsd = (n: number) => `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 const fmtPct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
+const fmtSigned = (n: number, digits = 2) => `${n >= 0 ? '+' : ''}${n.toFixed(digits)}`;
 
 const renderMovers = (m: BriefData['movers']): string[] => {
   const colTicker = 8, colPrice = 12, colChg = 10;
@@ -31,6 +33,70 @@ const renderNews = (news: BriefData['news'], limit = 8): string[] => {
     const headline = n.headline.length > 90 ? n.headline.slice(0, 87) + '...' : n.headline;
     return `  ${pc.bold(pc.cyan(n.ticker.padEnd(6)))}${headline}\n        ${pc.dim(n.source)}`;
   });
+};
+
+const vixLabel = (v: number): string => {
+  if (v < 15) return 'calm';
+  if (v < 20) return 'moderate';
+  if (v < 30) return 'elevated';
+  return 'high';
+};
+
+const renderMacro = (macro: BriefMacro | null): string[] => {
+  if (!macro) return [pc.dim('  (FRED key not set — run `firma config set fred-key <key>`)')];
+
+  const homeSym = CURRENCY_SYMBOL[macro.home_currency as Currency] ?? macro.home_currency;
+  const fmtHomeAmount = (n: number) => {
+    const abs = Math.abs(n);
+    return `${homeSym}${Math.round(abs).toLocaleString('en-US')}`;
+  };
+
+  const rows: string[] = [];
+
+  for (const r of macro.indicators) {
+    if (r.current == null) continue;
+    const delta = r.prior_1d != null ? r.current - r.prior_1d : null;
+    const arrow = delta == null ? '' : delta > 0 ? pc.green('▲') : delta < 0 ? pc.red('▼') : pc.dim('·');
+
+    let valueStr: string;
+    let deltaStr = '';
+    let note = '';
+
+    if (r.id === 'vix') {
+      valueStr = r.current.toFixed(2);
+      if (delta != null) deltaStr = pc.dim(`${arrow} ${fmtSigned(delta)}`);
+      note = pc.dim(`(${vixLabel(r.current)})`);
+    } else if (r.id === 'ust10') {
+      valueStr = `${r.current.toFixed(2)}%`;
+      if (delta != null) {
+        const bp = Math.round(delta * 100);
+        deltaStr = pc.dim(`${arrow} ${fmtSigned(bp, 0)}bp`);
+      }
+    } else if (r.id === 'fx') {
+      valueStr = r.current >= 100
+        ? r.current.toLocaleString('en-US', { maximumFractionDigits: 2 })
+        : r.current.toFixed(4);
+      if (delta != null) {
+        const pct = (delta / r.prior_1d!) * 100;
+        deltaStr = pc.dim(`${arrow} ${fmtSigned(pct)}%`);
+        if (delta > 0)      note = pc.dim('(USD strengthening)');
+        else if (delta < 0) note = pc.dim('(USD weakening)');
+      }
+    } else {
+      valueStr = r.current.toFixed(2);
+    }
+
+    rows.push(`  ${pc.bold(r.label.padEnd(22))}${valueStr.padEnd(12)}${deltaStr.padEnd(20)}${note}`);
+  }
+
+  if (macro.fx_impact_home != null && Math.abs(macro.fx_impact_home) >= 1) {
+    const color = macro.fx_impact_home > 0 ? pc.green : pc.red;
+    const sign = macro.fx_impact_home > 0 ? '+' : '−';
+    rows.push('');
+    rows.push(`  ${pc.dim('FX impact on portfolio:')} ${color(`${sign}${fmtHomeAmount(macro.fx_impact_home)}`)} ${pc.dim('(today vs previous trading day)')}`);
+  }
+
+  return rows;
 };
 
 const renderEarnings = (items: BriefData['earnings_upcoming']): string[] => {
@@ -72,12 +138,15 @@ export const briefCommand = async ({ json = false, refresh = false }: { json?: b
     return;
   }
 
-  const { portfolio, movers, news, earnings_upcoming } = data;
+  const { portfolio, movers, news, earnings_upcoming, macro } = data;
 
   const summaryLine = `${pc.dim('Portfolio:')} ${pc.bold(fmtUsd(portfolio.total_value_usd))} ${pc.dim(`across ${portfolio.holdings_count} holding${portfolio.holdings_count === 1 ? '' : 's'}`)}`;
 
   const body = [
     summaryLine,
+    '',
+    pc.bold('MACRO TODAY'),
+    ...renderMacro(macro),
     '',
     pc.bold('MOVERS (today)'),
     ...renderMovers(movers),

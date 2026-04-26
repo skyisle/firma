@@ -19,10 +19,12 @@ export type MacroIndicator = {
 
 export type MacroResult = MacroIndicator & {
   current: number | null;
+  prior_1d: number | null;
   prior_30d: number | null;
   prior_90d: number | null;
   avg_5y: number | null;
   latest_date: string | null;
+  prior_date: string | null;
 };
 
 export const CORE_MACRO_INDICATORS: MacroIndicator[] = [
@@ -66,7 +68,11 @@ const computeIndicator = async (
   const obs = await client.fetchObservations(ind.series_id, { from: fromDate });
   const valid = obs.filter((o): o is { date: string; value: number } => o.value != null);
   if (valid.length === 0) {
-    return { ...ind, current: null, prior_30d: null, prior_90d: null, avg_5y: null, latest_date: null };
+    return {
+      ...ind,
+      current: null, prior_1d: null, prior_30d: null, prior_90d: null,
+      avg_5y: null, latest_date: null, prior_date: null,
+    };
   }
 
   const apply = ind.invert ? (v: number) => 1 / v : (v: number) => v;
@@ -82,13 +88,18 @@ const computeIndicator = async (
   };
 
   const latest = transformed.at(-1)!;
+  // Most recent prior observation (handles weekends / holidays correctly)
+  const prior = transformed.length > 1 ? transformed[transformed.length - 2] : null;
+
   return {
     ...ind,
     current:     latest.value,
+    prior_1d:    prior?.value ?? null,
     prior_30d:   findOnOrBefore(daysAgoStr(30)),
     prior_90d:   findOnOrBefore(daysAgoStr(90)),
     avg_5y:      transformed.reduce((s, o) => s + o.value, 0) / transformed.length,
     latest_date: latest.date,
+    prior_date:  prior?.date ?? null,
   };
 };
 

@@ -76,8 +76,9 @@ Claude:  [renders live portfolio dashboard — holdings, net worth trend, asset 
 # 1. Install
 npm install -g firma-app
 
-# 2. Set your Finnhub key (free at finnhub.io)
-firma config set finnhub-key YOUR_KEY
+# 2. Set API keys (both free)
+firma config set finnhub-key YOUR_KEY   # finnhub.io
+firma config set fred-key YOUR_KEY      # fred.stlouisfed.org (for macro)
 
 # 3. Connect Claude Desktop
 firma mcp install
@@ -106,67 +107,92 @@ Your numbers never leave your machine.
 
 ## CLI reference
 
-Three verb groups: **`add`** (input), **`show`** (read, `--json` everywhere), **`report`** (aggregated, `--json` everywhere).
+`--json` is available on every read command. Alias: `firma rm` = `firma delete`.
+
+### Portfolio
+
+| Command | What it does |
+|---|---|
+| `firma show portfolio` | Holdings with P&L, avg cost, market value |
+| `firma show txns [ticker]` | Transaction history with running avg cost |
+| `firma show dividend` | Estimated annual income + per-ticker yield |
+| `firma show concentration` | HHI concentration by ticker, currency, sector, country |
+| `firma show snapshot [ticker]` | Portfolio value history; `--from`/`--to` for date range |
+
+### Balance & Cash Flow
+
+| Command | What it does |
+|---|---|
+| `firma add balance [-p YYYY-MM]` | Monthly asset & liability snapshot |
+| `firma add flow [-p YYYY-MM]` | Monthly income & expense entry |
+| `firma add monthly [-p YYYY-MM]` | Balance + flow in one call (month-end) |
+| `firma show balance [-p YYYY-MM]` | Stored balance entries for a period |
+| `firma show flow [-p YYYY-MM]` | Stored cash flow entries for a period |
+| `firma report` | Net worth trend + cash flow charts (combined) |
+| `firma report balance / flow / settle` | Targeted views |
+| `firma report -c USD` | Display in USD, EUR, JPY, CNY, or GBP |
+
+### Transactions
 
 | Command | What it does |
 |---|---|
 | `firma add txn` | Record a transaction (buy / sell / deposit / dividend / tax) |
-| `firma add balance [-p YYYY-MM]` | Monthly asset & liability snapshot |
-| `firma add flow [-p YYYY-MM]` | Monthly income & expense entry |
-| `firma add monthly [-p YYYY-MM]` | Balance + flow in one flow (month-end) |
-| `firma add snapshot` | Sync prices and record today's portfolio snapshot |
-| `firma show portfolio` | Holdings overview with P&L (auto-syncs prices) |
-| `firma show txns [ticker]` | Transaction history with running avg cost |
-| `firma show balance / flow [-p YYYY-MM]` | Stored entries for a period |
-| `firma show snapshot [ticker]` | Portfolio value history; `--from`/`--to` for date range |
-| `firma show dividend` | Estimated annual income + per-ticker yield |
-| `firma show concentration` | HHI concentration by ticker, currency, sector, country |
-| `firma show macro` | FRED macro snapshot: VIX, yields, USD index, credit spread, FX (cached per day) |
-| `firma show news / insider / financials / earnings <ticker>` | Finnhub data |
-| `firma report` | Net worth trend + cash flow charts |
-| `firma report balance / flow / settle` | Targeted views |
-| `firma report -c USD` | Display in USD, EUR, JPY, CNY, or GBP |
-| `firma brief` | Daily brief: movers, news, upcoming earnings (cached per day) |
 | `firma edit txn [id]` | Edit a transaction |
-| `firma edit balance / flow [period]` | Edit a monthly snapshot (existing values pre-filled) |
-| `firma edit snapshot` | Edit a snapshot entry (interactive picker) |
 | `firma delete txn [id]` | Delete a transaction |
-| `firma delete balance / flow [period]` | Delete all entries for a period (alias `rm`) |
-| `firma delete snapshot [date]` | Delete all snapshot entries for a date (alias `rm`) |
+
+### Snapshots
+
+| Command | What it does |
+|---|---|
+| `firma add snapshot` | Sync prices and record today's portfolio snapshot |
+| `firma edit snapshot` | Edit a snapshot entry (interactive picker) |
+| `firma delete snapshot [date]` | Delete all entries for a date |
+
+### Research (Finnhub)
+
+| Command | What it does |
+|---|---|
+| `firma show news <ticker>` | Recent company news |
+| `firma show insider <ticker>` | Insider buy/sell transactions |
+| `firma show financials <ticker>` | SEC-reported quarterly financials |
+| `firma show earnings [ticker]` | Earnings calendar + EPS history |
+
+### Macro (FRED)
+
+| Command | What it does |
+|---|---|
+| `firma show macro` | VIX, 10Y yield, yield curve, USD index, HY spread, inflation, fed funds, FX (cached per day) |
+
+### Daily Brief
+
+| Command | What it does |
+|---|---|
+| `firma brief` | Movers, news, upcoming earnings, macro context (cached per day; `--refresh` to regenerate) |
+
+### Actions & Config
+
+| Command | What it does |
+|---|---|
 | `firma sync` | Fetch latest prices from Finnhub |
 | `firma mcp install` | Register MCP server in Claude Desktop |
 | `firma config set finnhub-key KEY` | Set Finnhub API key |
-| `firma config set fred-key KEY` | Set FRED API key (for `show macro` and `fetch_fred_series`) |
+| `firma config set fred-key KEY` | Set FRED API key (free at fred.stlouisfed.org) |
 | `firma config set db-path PATH` | Use a custom database location |
+| `firma config set currency CODE` | Set home currency for display (KRW, USD, JPY, …) |
 | `firma config get [key]` | Print a config value (omit key to list all) |
 
 ---
 
-## MCP tools
+## Claude integration (MCP)
 
-Available in Claude Desktop after `firma mcp install`. Same `add_*` / `show_*` / `report_*` shape as the CLI.
+After `firma mcp install`, every CLI command has a matching MCP tool — Claude can read and write all your data directly from conversation.
+
+Two tools are available only via MCP (no CLI equivalent):
 
 | Tool | What it does |
 |---|---|
-| `add_txn` / `edit_txn` / `delete_txn` | Stock transaction CRUD |
-| `add_balance` / `add_flow` | Upsert (acts as edit when the composite key matches) |
-| `add_monthly` | Batch upsert balance + flow for one period |
-| `delete_balance` / `delete_flow` | Drop entries by period (or single composite key) |
-| `add_snapshot` / `edit_snapshot` / `delete_snapshot` | Portfolio snapshot CRUD |
-| `show_portfolio` | Holdings with P&L, avg cost, market value |
-| `show_txns` | Transaction history (filterable by ticker) |
-| `show_balance` / `show_flow` | Stored entries (filterable by period) |
-| `show_snapshot` | Portfolio value history (per-ticker or daily total) |
-| `show_dividend` | Estimated annual dividend income + per-ticker yield |
-| `show_concentration` | HHI concentration by ticker, currency, sector, country |
-| `show_macro` | Curated FRED macro snapshot (8 indicators + dynamic FX) |
-| `fetch_fred_series` / `search_fred_series` | Raw FRED time-series access (any of 800K+ series) |
-| `show_prices` | Cached price snapshots |
-| `show_news` / `show_insider` / `show_financials` / `show_earnings` | Finnhub passthroughs |
-| `get_brief` | Daily brief: movers, news, upcoming earnings (cached per day) |
-| `report_balance` / `report_flow` / `report_combined` | Monthly aggregations with trends |
-| `report_settle` | Single-period summary with `net_worth` + `net_flow` |
-| `sync_prices` | Refresh prices from Finnhub |
+| `fetch_fred_series` | Fetch any FRED time series by ID (800K+ series available) |
+| `search_fred_series` | Search the FRED catalog by keyword to discover series IDs |
 
 ---
 

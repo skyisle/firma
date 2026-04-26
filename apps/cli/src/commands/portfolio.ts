@@ -1,10 +1,12 @@
 import { log, note, spinner } from '@clack/prompts';
 import pc from 'picocolors';
-import { getRepository } from '../db/index.ts';
 import { aggregateHoldings } from '@firma/db';
+import { createFredClient, FX_BY_CURRENCY } from '@firma/fred';
+import { getRepository } from '../db/index.ts';
 import { syncPrices } from '../services/sync.ts';
 import { fetchFxRates } from '../services/fx.ts';
-import { fracBar, fmtAmount, entryKrw, FALLBACK_RATES, pickDisplayCurrency, stalenessLine } from '../utils/index.ts';
+import { readConfig } from '../config.ts';
+import { fracBar, fmtAmount, entryKrw, FALLBACK_RATES, CURRENCY_SYMBOL, pickDisplayCurrency, stalenessLine, type Currency } from '../utils/index.ts';
 
 const fmt = {
   usd: (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
@@ -14,6 +16,43 @@ const fmt = {
 
 const colorPnl = (n: number, text: string) => n >= 0 ? pc.green(text) : pc.red(text);
 const COL = { TICKER: 8, SHARES: 8, AVG: 12, PRICE: 12, YIELD: 8, PNL: 22 };
+
+const renderFxContext = async (cur: Currency, portfolioUsd: number): Promise<string | null> => {
+  if (cur === 'USD') return null;
+  const fxSeries = FX_BY_CURRENCY[cur];
+  if (!fxSeries) return null;
+  const fredKey = readConfig()?.fred_api_key;
+  if (!fredKey) return null;
+
+  try {
+    const client = createFredClient(fredKey);
+    const fromDate = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
+    const obs = await client.fetchObservations(fxSeries.series_id, { from: fromDate });
+    const valid = obs.filter((o): o is { date: string; value: number } => o.value != null);
+    if (valid.length < 2) return null;
+
+    const apply = fxSeries.invert ? (v: number) => 1 / v : (v: number) => v;
+    const latest = apply(valid.at(-1)!.value);
+    const prior  = apply(valid[valid.length - 2].value);
+    const homeSym = CURRENCY_SYMBOL[cur];
+
+    const rateStr = latest >= 100
+      ? Math.round(latest).toLocaleString('en-US')
+      : latest.toFixed(4);
+
+    const delta = portfolioUsd * (latest - prior);
+    const direction = latest > prior ? 'USD strengthened' : latest < prior ? 'USD weakened' : '';
+    const sign = delta > 0 ? '+' : delta < 0 ? '−' : '';
+    const deltaAmount = Math.round(Math.abs(delta)).toLocaleString('en-US');
+
+    const fxPart = pc.dim(`@ ${rateStr} ${cur}/USD`);
+    if (Math.abs(delta) < 1 || !direction) return fxPart;
+    const deltaPart = pc.dim(`·  ${sign}${homeSym}${deltaAmount} today  (${direction})`);
+    return `${fxPart}  ${deltaPart}`;
+  } catch {
+    return null;
+  }
+};
 
 export const showPortfolioCommand = async ({ json = false, sync = true, currency }: { json?: boolean; sync?: boolean; currency?: string } = {}) => {
   const repo = getRepository();
@@ -190,6 +229,9 @@ export const showPortfolioCommand = async ({ json = false, sync = true, currency
       lines.push('');
       lines.push(`  ${'Net Worth'.padEnd(14)}  ${pc.dim('─'.repeat(BAR_W + 2))}  ${pc.bold(fmt2(netWorth))}  ${pc.dim(`(${latestPeriod})`)}`);
       lines.push(`  ${pc.dim('Portfolio MV'.padEnd(14))}  ${pc.dim('─'.repeat(BAR_W + 2))}  ${portfolioMvDisplay}`);
+
+      const fxLine = await renderFxContext(cur, totalValue);
+      if (fxLine) lines.push(`  ${' '.padEnd(14)}  ${pc.dim('─'.repeat(BAR_W + 2))}  ${fxLine}`);
 
       note(lines.join('\n'), 'Net Worth Breakdown');
     }
