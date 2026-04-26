@@ -15,6 +15,8 @@ export type Profile = {
   currency: string;
   marketCapitalization: number;
   logo: string;
+  country?: string;
+  finnhubIndustry?: string;
 };
 
 export type Metric = {
@@ -23,6 +25,8 @@ export type Metric = {
     '52WeekLow': number;
     peBasicExclExtraTTM: number;
     epsBasicExclExtraAnnual: number;
+    dividendPerShareAnnual: number;
+    dividendYieldIndicatedAnnual: number;
   };
 };
 
@@ -39,6 +43,10 @@ export type StockData = {
   pe: number | null;
   eps: number | null;
   marketCap: number;
+  sector: string | null;
+  country: string | null;
+  dividendPerShare: number | null;
+  dividendYield: number | null;
 };
 
 export type NewsItem = {

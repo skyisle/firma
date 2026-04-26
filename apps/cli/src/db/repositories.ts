@@ -1,14 +1,14 @@
-import { eq, asc, desc } from 'drizzle-orm';
-import { transactions, balanceEntries, flowEntries, prices } from '@firma/db';
+import { eq, asc, desc, and, gte, lte } from 'drizzle-orm';
+import { transactions, balanceEntries, flowEntries, prices, portfolioSnapshots } from '@firma/db';
 import type {
-  TransactionRepository, PriceRepository, BalanceRepository, FlowRepository, DataRepository,
-  NewTransaction, NewPrice, NewBalanceEntry, NewFlowEntry,
+  TransactionRepository, PriceRepository, BalanceRepository, FlowRepository, SnapshotRepository, DataRepository,
+  NewTransaction, NewPrice, NewBalanceEntry, NewFlowEntry, NewSnapshot,
 } from '@firma/db';
 import type { getDb } from './client.ts';
 
 type Db = ReturnType<typeof getDb>;
 
-export const createTransactionRepository = (db: Db): TransactionRepository => ({
+const createTransactionRepository = (db: Db): TransactionRepository => ({
   getAll: (ticker?: string) =>
     ticker
       ? db.select().from(transactions).where(eq(transactions.ticker, ticker.toUpperCase())).orderBy(asc(transactions.date)).all()
@@ -26,7 +26,7 @@ export const createTransactionRepository = (db: Db): TransactionRepository => ({
   },
 });
 
-export const createPriceRepository = (db: Db): PriceRepository => ({
+const createPriceRepository = (db: Db): PriceRepository => ({
   getAll: () => db.select().from(prices).all(),
   upsertBatch: (priceList: NewPrice[]) => {
     for (const p of priceList) {
@@ -35,7 +35,7 @@ export const createPriceRepository = (db: Db): PriceRepository => ({
   },
 });
 
-export const createBalanceRepository = (db: Db): BalanceRepository => ({
+const createBalanceRepository = (db: Db): BalanceRepository => ({
   getAll: () => db.select().from(balanceEntries).all(),
   getByPeriod: (period: string) =>
     db.select().from(balanceEntries).where(eq(balanceEntries.period, period)).all(),
@@ -44,13 +44,13 @@ export const createBalanceRepository = (db: Db): BalanceRepository => ({
   upsert: (entry: NewBalanceEntry) =>
     db.insert(balanceEntries).values(entry).onConflictDoUpdate({
       target: [balanceEntries.period, balanceEntries.type, balanceEntries.sub_type, balanceEntries.category],
-      set: { amount: entry.amount, date: entry.date, memo: entry.memo },
+      set: { amount: entry.amount, currency: entry.currency, date: entry.date, memo: entry.memo },
     }).run(),
   deleteByPeriod: (period: string) =>
     db.delete(balanceEntries).where(eq(balanceEntries.period, period)).run().changes,
 });
 
-export const createFlowRepository = (db: Db): FlowRepository => ({
+const createFlowRepository = (db: Db): FlowRepository => ({
   getAll: () => db.select().from(flowEntries).all(),
   getByPeriod: (period: string) =>
     db.select().from(flowEntries).where(eq(flowEntries.period, period)).all(),
@@ -59,10 +59,41 @@ export const createFlowRepository = (db: Db): FlowRepository => ({
   upsert: (entry: NewFlowEntry) =>
     db.insert(flowEntries).values(entry).onConflictDoUpdate({
       target: [flowEntries.period, flowEntries.type, flowEntries.sub_type, flowEntries.category],
-      set: { amount: entry.amount, date: entry.date, memo: entry.memo },
+      set: { amount: entry.amount, currency: entry.currency, date: entry.date, memo: entry.memo },
     }).run(),
   deleteByPeriod: (period: string) =>
     db.delete(flowEntries).where(eq(flowEntries.period, period)).run().changes,
+});
+
+const createSnapshotRepository = (db: Db): SnapshotRepository => ({
+  getDates: () =>
+    db.selectDistinct({ date: portfolioSnapshots.date }).from(portfolioSnapshots).orderBy(desc(portfolioSnapshots.date)).all().map(r => r.date),
+  getAll: (from?: string, to?: string) => {
+    const conditions = [
+      from ? gte(portfolioSnapshots.date, from) : undefined,
+      to   ? lte(portfolioSnapshots.date, to)   : undefined,
+    ].filter(Boolean) as Parameters<typeof and>;
+    return conditions.length
+      ? db.select().from(portfolioSnapshots).where(and(...conditions)).orderBy(asc(portfolioSnapshots.date)).all()
+      : db.select().from(portfolioSnapshots).orderBy(asc(portfolioSnapshots.date)).all();
+  },
+  getByDate: (date: string) =>
+    db.select().from(portfolioSnapshots).where(eq(portfolioSnapshots.date, date)).all(),
+  getByTicker: (ticker: string) =>
+    db.select().from(portfolioSnapshots).where(eq(portfolioSnapshots.ticker, ticker)).orderBy(asc(portfolioSnapshots.date)).all(),
+  upsert: (entry: NewSnapshot) =>
+    db.insert(portfolioSnapshots).values(entry).onConflictDoUpdate({
+      target: [portfolioSnapshots.date, portfolioSnapshots.ticker],
+      set: { shares: entry.shares, avg_price: entry.avg_price, current_price: entry.current_price },
+    }).run(),
+  update: (date: string, ticker: string, fields) => {
+    const res = db.update(portfolioSnapshots).set(fields).where(
+      and(eq(portfolioSnapshots.date, date), eq(portfolioSnapshots.ticker, ticker)),
+    ).run();
+    return res.changes > 0;
+  },
+  deleteByDate: (date: string) =>
+    db.delete(portfolioSnapshots).where(eq(portfolioSnapshots.date, date)).run().changes,
 });
 
 export const createDataRepository = (db: Db): DataRepository => ({
@@ -70,4 +101,5 @@ export const createDataRepository = (db: Db): DataRepository => ({
   prices: createPriceRepository(db),
   balance: createBalanceRepository(db),
   flow: createFlowRepository(db),
+  snapshots: createSnapshotRepository(db),
 });

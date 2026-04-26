@@ -2,6 +2,7 @@ import { log, note } from '@clack/prompts';
 import pc from 'picocolors';
 import { getDb, transactions } from '../db/index.ts';
 import { eq, asc } from 'drizzle-orm';
+import { CURRENCY_SYMBOL, type Currency } from '../utils/index.ts';
 
 const TYPE_COLOR: Record<string, (s: string) => string> = {
   buy:      pc.green,
@@ -12,7 +13,12 @@ const TYPE_COLOR: Record<string, (s: string) => string> = {
 };
 
 const fmt = {
-  usd: (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+  price: (n: number, currency: string) => {
+    const sym = CURRENCY_SYMBOL[currency as Currency] ?? currency;
+    if (currency === 'KRW') return `${sym}${Math.round(n).toLocaleString('ko-KR')}`;
+    if (currency === 'JPY') return `${sym}${Math.round(n).toLocaleString('ja-JP')}`;
+    return `${sym}${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  },
   num: (n: number) => n % 1 === 0 ? `${n}` : n.toFixed(4),
 };
 
@@ -81,9 +87,9 @@ export const showTxnsCommand = async (ticker?: string, { json = false } = {}) =>
         ...(showTicker ? [pc.bold(t.ticker.padEnd(COL.TICKER))] : []),
         colorType(t.type.padEnd(COL.TYPE)),
         fmt.num(t.shares).padEnd(COL.SHARES),
-        (t.price > 0 ? fmt.usd(t.price) : pc.dim('─')).padEnd(COL.PRICE),
-        (total > 0 ? fmt.usd(total) : pc.dim('─')).padEnd(COL.TOTAL),
-        ...(showAvg ? [avg > 0 ? pc.bold(fmt.usd(avg)) : pc.dim('─')] : []),
+        (t.price > 0 ? fmt.price(t.price, t.currency) : pc.dim('─')).padEnd(COL.PRICE),
+        (total > 0 ? fmt.price(total, t.currency) : pc.dim('─')).padEnd(COL.TOTAL),
+        ...(showAvg ? [avg > 0 ? pc.bold(fmt.price(avg, t.currency)) : pc.dim('─')] : []),
       ].join('  ');
       return { shares: ns, costShares: nc, totalCost: nt, rows: [...rows, row] };
     },

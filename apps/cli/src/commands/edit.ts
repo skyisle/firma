@@ -1,14 +1,10 @@
-import { cancel, isCancel, log, select, text } from '@clack/prompts';
+import { log, select, text } from '@clack/prompts';
 import pc from 'picocolors';
-import { getRepository } from '../db/index.ts';
 import type { Transaction, NewTransaction } from '@firma/db';
+import { getRepository } from '../db/index.ts';
+import { guard } from '../utils/index.ts';
 import { addBalanceCommand } from './balance.ts';
 import { addFlowCommand } from './flow.ts';
-
-const guard = <T>(value: T | symbol): T => {
-  if (isCancel(value)) { cancel('Cancelled'); process.exit(0); }
-  return value as T;
-};
 
 const validateDate = (val: string) => {
   if (!val.trim()) return 'Date is required';

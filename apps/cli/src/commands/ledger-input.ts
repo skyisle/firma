@@ -1,7 +1,8 @@
-import { text, isCancel, cancel, log } from '@clack/prompts';
+import { text, log } from '@clack/prompts';
 import pc from 'picocolors';
+import { guard } from '../utils/index.ts';
 
-export type CategoryDef = {
+type CategoryDef = {
   type: string;
   subType: string;
   category: string;
@@ -22,13 +23,14 @@ const parseAmount = (val: string): number | undefined => {
   return isNaN(n) || n < 0 ? undefined : n;
 };
 
-const fmtAmount = (n: number) =>
-  n === 0 ? pc.dim('0') : pc.cyan(n.toLocaleString('en-US'));
+const fmtAmt = (n: number, symbol?: string) =>
+  n === 0 ? pc.dim('0') : pc.cyan(`${symbol ?? ''}${n.toLocaleString('en-US')}`);
 
 export const inputCategoryGroup = async (
   categories: CategoryDef[],
   existingMap: Map<string, number>,
   autoFillMap: Map<string, number> = new Map(),
+  displaySymbol?: string,
 ): Promise<EntryResult[]> => {
   const results: EntryResult[] = [];
   const subTypes = [...new Set(categories.map(c => c.subType))];
@@ -40,43 +42,22 @@ export const inputCategoryGroup = async (
     for (const cat of group) {
       if (cat.autoFilled && autoFillMap.has(cat.category)) {
         const amount = autoFillMap.get(cat.category)!;
-        log.message(`  ${cat.label.padEnd(24)} ${fmtAmount(amount)}  ${pc.dim('(auto)')}`);
+        log.message(`  ${cat.label.padEnd(24)} ${fmtAmt(amount, displaySymbol)}  ${pc.dim('(auto)')}`);
         results.push({ type: cat.type, sub_type: cat.subType, category: cat.category, amount });
         continue;
       }
 
       const existing = existingMap.get(cat.category) ?? 0;
-      const answer = await text({
+      const answer = guard(await text({
         message: cat.label,
         initialValue: existing > 0 ? String(existing) : '',
         placeholder: '0',
-      });
+      })) as string;
 
-      if (isCancel(answer)) {
-        cancel('Cancelled');
-        process.exit(0);
-      }
-
-      const amount = parseAmount(String(answer)) ?? existing;
+      const amount = parseAmount(answer) ?? existing;
       results.push({ type: cat.type, sub_type: cat.subType, category: cat.category, amount });
     }
   }
 
   return results;
-};
-
-export const currentPeriod = () => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-};
-
-export const periodEndDate = (period: string) => {
-  const [y, m] = period.split('-').map(Number);
-  const d = new Date(y, m, 0);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
-
-export const printSummary = (label: string, entries: EntryResult[]) => {
-  const total = entries.reduce((s, e) => s + e.amount, 0);
-  log.message(`  ${pc.dim(label.padEnd(20))}${pc.bold(total.toLocaleString('en-US'))} KRW`);
 };

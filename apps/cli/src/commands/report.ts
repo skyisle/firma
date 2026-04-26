@@ -2,28 +2,14 @@ import { log, note } from '@clack/prompts';
 import pc from 'picocolors';
 import { getRepository } from '../db/index.ts';
 import { fetchFxRates } from '../services/fx.ts';
-import { currentPeriod } from './ledger-input.ts';
+import {
+  fmtAmount, entryKrw, fracBar, FALLBACK_RATES, currentPeriod, type Currency,
+} from '../utils/index.ts';
 import type { BalanceEntry, FlowEntry } from '@firma/db';
 
 type BalancePeriod = { period: string; assets: number; liabilities: number; netWorth: number };
 type FlowPeriod    = { period: string; income: number; expenses: number; netFlow: number };
 
-export type Currency = 'KRW' | 'USD' | 'EUR' | 'JPY' | 'CNY' | 'GBP';
-
-const CURRENCY_SYMBOL: Record<Currency, string> = {
-  KRW: '₩', USD: '$', EUR: '€', JPY: '¥', CNY: '¥', GBP: '£',
-};
-
-const fmtAmount = (amountKrw: number, currency: Currency, rate: number) => {
-  const v = amountKrw * rate;
-  const sym = CURRENCY_SYMBOL[currency];
-  if (currency === 'KRW') return `${sym}${Math.round(v / 10000).toLocaleString('ko-KR')}만`;
-  if (currency === 'JPY') return `${sym}${Math.round(v).toLocaleString('ja-JP')}`;
-  return `${sym}${v.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-};
-
-
-const man = (n: number) => `₩${Math.round(n / 10000).toLocaleString('ko-KR')}만`;
 const delta = (n: number, fmt: (v: number) => string) => {
   if (n === 0) return pc.dim('─');
   const s = `${n >= 0 ? '+' : ''}${fmt(n)}`;
@@ -32,15 +18,6 @@ const delta = (n: number, fmt: (v: number) => string) => {
 const colorNet = (n: number, s: string) => n >= 0 ? pc.green(s) : pc.red(s);
 
 const BAR_W = 22;
-const EIGHTHS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
-
-export const fracBar = (ratio: number, width: number): string => {
-  const clamped = Math.max(0, Math.min(1, ratio));
-  const filled = clamped * width;
-  const full = Math.floor(filled);
-  const partial = EIGHTHS[Math.round((filled - full) * 8)] ?? '';
-  return '█'.repeat(full) + partial;
-};
 
 const netWorthBar = (value: number, max: number): string => {
   const bar = fracBar(value / max, BAR_W);
@@ -71,23 +48,25 @@ const BALANCE_LABEL: Record<string, string> = {
 };
 
 
-const aggregateBalance = (entries: BalanceEntry[]) =>
-  [...entries.reduce((map, { period, type, amount }) => {
-    const prev = map.get(period) ?? { assets: 0, liabilities: 0 };
-    return map.set(period, {
-      assets:      prev.assets      + (type === 'asset'      ? amount : 0),
-      liabilities: prev.liabilities + (type === 'liability'  ? amount : 0),
+const aggregateBalance = (entries: BalanceEntry[], rates: Record<string, number>) =>
+  [...entries.reduce((map, e) => {
+    const krw = entryKrw(e.amount, e.currency, rates);
+    const prev = map.get(e.period) ?? { assets: 0, liabilities: 0 };
+    return map.set(e.period, {
+      assets:      prev.assets      + (e.type === 'asset'     ? krw : 0),
+      liabilities: prev.liabilities + (e.type === 'liability' ? krw : 0),
     });
   }, new Map<string, { assets: number; liabilities: number }>()).entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([period, { assets, liabilities }]) => ({ period, assets, liabilities, netWorth: assets - liabilities }));
 
-const aggregateFlow = (entries: FlowEntry[]) =>
-  [...entries.reduce((map, { period, type, amount }) => {
-    const prev = map.get(period) ?? { income: 0, expenses: 0 };
-    return map.set(period, {
-      income:   prev.income   + (type === 'income'  ? amount : 0),
-      expenses: prev.expenses + (type === 'expense' ? amount : 0),
+const aggregateFlow = (entries: FlowEntry[], rates: Record<string, number>) =>
+  [...entries.reduce((map, e) => {
+    const krw = entryKrw(e.amount, e.currency, rates);
+    const prev = map.get(e.period) ?? { income: 0, expenses: 0 };
+    return map.set(e.period, {
+      income:   prev.income   + (e.type === 'income'  ? krw : 0),
+      expenses: prev.expenses + (e.type === 'expense' ? krw : 0),
     });
   }, new Map<string, { income: number; expenses: number }>()).entries()]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -138,7 +117,7 @@ const renderBalance = (rows: BalancePeriod[], fmt: (v: number) => string): { tab
   return { table: `${header}\n${divider}\n${lines.join('\n')}${tableFooter}`, chart: chartLines.join('\n') };
 };
 
-const renderBalanceBreakdown = (entries: BalanceEntry[], year: string, fmt: (v: number) => string): string => {
+const renderBalanceBreakdown = (entries: BalanceEntry[], year: string, fmt: (v: number) => string, rates: Record<string, number>): string => {
   const yearEntries = entries.filter(e => e.period.startsWith(year));
   if (yearEntries.length === 0) return pc.dim(`No data for ${year}`);
 
@@ -149,7 +128,8 @@ const renderBalanceBreakdown = (entries: BalanceEntry[], year: string, fmt: (v: 
   const liabBySubType  = new Map<string, number>();
   for (const e of latest) {
     const map = e.type === 'asset' ? assetBySubType : liabBySubType;
-    map.set(e.sub_type, (map.get(e.sub_type) ?? 0) + e.amount);
+    const krw = entryKrw(e.amount, e.currency, rates);
+    map.set(e.sub_type, (map.get(e.sub_type) ?? 0) + krw);
   }
 
   const totalAssets = [...assetBySubType.values()].reduce((s, v) => s + v, 0);
@@ -157,13 +137,13 @@ const renderBalanceBreakdown = (entries: BalanceEntry[], year: string, fmt: (v: 
   const netWorth    = totalAssets - totalLiab;
 
   return [
-    `${pc.bold(pc.cyan('Assets'))}  ${pc.dim(`Total ${man(totalAssets)}`)}  ${pc.dim(`(${latestPeriod})`)}`,
+    `${pc.bold(pc.cyan('Assets'))}  ${pc.dim(`Total ${fmt(totalAssets)}`)}  ${pc.dim(`(${latestPeriod})`)}`,
     ...renderGroupRows(assetBySubType, totalAssets, pc.cyan, fmt),
     '',
-    `${pc.bold(pc.yellow('Liabilities'))}  ${pc.dim(`Total ${man(totalLiab)}`)}`,
+    `${pc.bold(pc.yellow('Liabilities'))}  ${pc.dim(`Total ${fmt(totalLiab)}`)}`,
     ...(liabBySubType.size ? renderGroupRows(liabBySubType, totalLiab > 0 ? totalLiab : 1, pc.yellow, fmt) : [`  ${pc.dim('None')}`]),
     '',
-    pc.dim(`Net Worth  ${man(netWorth)}`),
+    pc.dim(`Net Worth  ${fmt(netWorth)}`),
   ].join('\n');
 };
 
@@ -190,7 +170,7 @@ const renderFlow = (rows: FlowPeriod[], fmt: (v: number) => string): { table: st
   return { table: `${header}\n${divider}\n${lines.join('\n')}${tableFooter}`, chart: `${pc.dim('◀ expense · saving ▶')}\n${chartLines.join('\n')}` };
 };
 
-const renderFlowBreakdown = (entries: FlowEntry[], year: string, fmt: (v: number) => string): string => {
+const renderFlowBreakdown = (entries: FlowEntry[], year: string, fmt: (v: number) => string, rates: Record<string, number>): string => {
   const yearEntries = entries.filter(e => e.period.startsWith(year));
   if (yearEntries.length === 0) return pc.dim(`No data for ${year}`);
 
@@ -198,7 +178,8 @@ const renderFlowBreakdown = (entries: FlowEntry[], year: string, fmt: (v: number
   const expenseMap = new Map<string, number>();
   for (const e of yearEntries) {
     const map = e.type === 'income' ? incomeMap : expenseMap;
-    map.set(e.category, (map.get(e.category) ?? 0) + e.amount);
+    const krw = entryKrw(e.amount, e.currency, rates);
+    map.set(e.category, (map.get(e.category) ?? 0) + krw);
   }
 
   const totalIncome  = [...incomeMap.values()].reduce((s, v) => s + v, 0);
@@ -217,25 +198,18 @@ const renderFlowBreakdown = (entries: FlowEntry[], year: string, fmt: (v: number
   ].join('\n');
 };
 
-const reportSettle = async (period: string | undefined, json: boolean) => {
+const reportSettle = async (period: string | undefined, json: boolean, currency: Currency = 'USD') => {
   const repo = getRepository();
   const targetPeriod = period ?? currentPeriod();
 
   const balEntries = repo.balance.getByPeriod(targetPeriod);
   const flowEnts   = repo.flow.getByPeriod(targetPeriod);
 
-  const total_assets      = balEntries.filter(e => e.type === 'asset').reduce((s, e) => s + e.amount, 0);
-  const total_liabilities = balEntries.filter(e => e.type === 'liability').reduce((s, e) => s + e.amount, 0);
-  const total_income      = flowEnts.filter(e => e.type === 'income').reduce((s, e) => s + e.amount, 0);
-  const total_expenses    = flowEnts.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0);
-  const net_worth         = total_assets - total_liabilities;
-  const net_flow          = total_income - total_expenses;
-
   if (json) {
     process.stdout.write(JSON.stringify({
       period: targetPeriod,
-      balance: { entries: balEntries, total_assets, total_liabilities, net_worth },
-      flow:    { entries: flowEnts,   total_income, total_expenses, net_flow },
+      balance: { entries: balEntries },
+      flow:    { entries: flowEnts },
     }, null, 2) + '\n');
     return;
   }
@@ -245,17 +219,28 @@ const reportSettle = async (period: string | undefined, json: boolean) => {
     return;
   }
 
+  const rates = await fetchFxRates().catch(() => FALLBACK_RATES as Record<string, number>);
+  const rate = (rates[currency] ?? FALLBACK_RATES[currency]) as number;
+  const fmt = (krw: number) => fmtAmount(krw, currency, rate);
+
+  const total_assets      = balEntries.filter(e => e.type === 'asset').reduce((s, e) => s + entryKrw(e.amount, e.currency, rates), 0);
+  const total_liabilities = balEntries.filter(e => e.type === 'liability').reduce((s, e) => s + entryKrw(e.amount, e.currency, rates), 0);
+  const total_income      = flowEnts.filter(e => e.type === 'income').reduce((s, e) => s + entryKrw(e.amount, e.currency, rates), 0);
+  const total_expenses    = flowEnts.filter(e => e.type === 'expense').reduce((s, e) => s + entryKrw(e.amount, e.currency, rates), 0);
+  const net_worth         = total_assets - total_liabilities;
+  const net_flow          = total_income - total_expenses;
+
   const colorFlow = net_flow >= 0 ? pc.green : pc.red;
   const body = [
     pc.bold('BALANCE SHEET'),
-    `  ${'Assets'.padEnd(16)}${total_assets.toLocaleString('en-US').padStart(16)} KRW`,
-    `  ${'Liabilities'.padEnd(16)}${total_liabilities.toLocaleString('en-US').padStart(16)} KRW`,
-    `  ${pc.bold('Net Worth'.padEnd(16))}${pc.bold(net_worth.toLocaleString('en-US').padStart(16))} KRW`,
+    `  ${'Assets'.padEnd(16)}${fmt(total_assets).padStart(16)}`,
+    `  ${'Liabilities'.padEnd(16)}${fmt(total_liabilities).padStart(16)}`,
+    `  ${pc.bold('Net Worth'.padEnd(16))}${pc.bold(fmt(net_worth).padStart(16))}`,
     '',
     pc.bold('CASH FLOW'),
-    `  ${'Income'.padEnd(16)}${total_income.toLocaleString('en-US').padStart(16)} KRW`,
-    `  ${'Expenses'.padEnd(16)}${total_expenses.toLocaleString('en-US').padStart(16)} KRW`,
-    `  ${pc.bold('Net Flow'.padEnd(16))}${colorFlow(pc.bold(net_flow.toLocaleString('en-US').padStart(16)))} KRW`,
+    `  ${'Income'.padEnd(16)}${fmt(total_income).padStart(16)}`,
+    `  ${'Expenses'.padEnd(16)}${fmt(total_expenses).padStart(16)}`,
+    `  ${pc.bold('Net Flow'.padEnd(16))}${colorFlow(pc.bold(fmt(net_flow).padStart(16)))}`,
   ].join('\n');
 
   note(body, `Settlement Summary  ${targetPeriod}`);
@@ -263,10 +248,10 @@ const reportSettle = async (period: string | undefined, json: boolean) => {
 
 export const reportCommand = async (
   target?: string,
-  currency: Currency = 'KRW',
+  currency: Currency = 'USD',
   { json = false, period }: { json?: boolean; period?: string } = {},
 ) => {
-  if (target === 'settle') return reportSettle(period, json);
+  if (target === 'settle') return reportSettle(period, json, currency);
 
   const showBalance = !target || target === 'balance';
   const showFlow    = !target || target === 'flow';
@@ -278,12 +263,12 @@ export const reportCommand = async (
 
   const repo = getRepository();
   const [rates, balanceData, flowData] = await Promise.all([
-    fetchFxRates().catch(() => ({ KRW: 1, USD: 0.00072, EUR: 0.00066, JPY: 0.107, CNY: 0.0052, GBP: 0.00057 })),
+    fetchFxRates().catch(() => FALLBACK_RATES as Record<string, number>),
     showBalance ? Promise.resolve(repo.balance.getAll()) : Promise.resolve([]),
     showFlow    ? Promise.resolve(repo.flow.getAll())    : Promise.resolve([]),
   ]);
 
-  const rate = (rates as Record<string, number>)[currency] ?? 1;
+  const rate = (rates[currency] ?? FALLBACK_RATES[currency]) as number;
   const fmt = (v: number) => fmtAmount(v, currency, rate);
   const currentYear = new Date().getFullYear().toString();
 
@@ -293,24 +278,24 @@ export const reportCommand = async (
   }
 
   if (showBalance) {
-    const rows = aggregateBalance(balanceData).slice(-36);
+    const rows = aggregateBalance(balanceData, rates).slice(-36);
     if (rows.length === 0) log.warn('No balance sheet data found.');
     else {
       const { table, chart } = renderBalance(rows, fmt);
       note(table, 'Balance Sheet');
       note(chart, 'Net Worth Trend');
-      note(renderBalanceBreakdown(balanceData, currentYear, fmt), `${currentYear} Asset Breakdown`);
+      note(renderBalanceBreakdown(balanceData, currentYear, fmt, rates), `${currentYear} Asset Breakdown`);
     }
   }
 
   if (showFlow) {
-    const rows = aggregateFlow(flowData).slice(-36);
+    const rows = aggregateFlow(flowData, rates).slice(-36);
     if (rows.length === 0) log.warn('No cash flow data found.');
     else {
       const { table, chart } = renderFlow(rows, fmt);
       note(table, 'Cash Flow');
       note(chart, 'Savings Trend');
-      note(renderFlowBreakdown(flowData, currentYear, fmt), `${currentYear} Breakdown`);
+      note(renderFlowBreakdown(flowData, currentYear, fmt, rates), `${currentYear} Breakdown`);
     }
   }
 };

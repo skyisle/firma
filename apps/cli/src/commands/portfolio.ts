@@ -3,6 +3,8 @@ import pc from 'picocolors';
 import { getRepository } from '../db/index.ts';
 import { aggregateHoldings } from '@firma/db';
 import { syncPrices } from '../services/sync.ts';
+import { fetchFxRates } from '../services/fx.ts';
+import { fracBar, fmtAmount, entryKrw, FALLBACK_RATES, pickDisplayCurrency } from '../utils/index.ts';
 
 const fmt = {
   usd: (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
@@ -11,9 +13,9 @@ const fmt = {
 };
 
 const colorPnl = (n: number, text: string) => n >= 0 ? pc.green(text) : pc.red(text);
-const COL = { TICKER: 8, SHARES: 8, AVG: 12, PRICE: 12, PNL: 22 };
+const COL = { TICKER: 8, SHARES: 8, AVG: 12, PRICE: 12, YIELD: 8, PNL: 22 };
 
-export const showPortfolioCommand = async ({ json = false, sync = true } = {}) => {
+export const showPortfolioCommand = async ({ json = false, sync = true, currency }: { json?: boolean; sync?: boolean; currency?: string } = {}) => {
   const repo = getRepository();
   const holdings = aggregateHoldings(repo.transactions.getAll());
 
@@ -22,6 +24,8 @@ export const showPortfolioCommand = async ({ json = false, sync = true } = {}) =
     log.warn('No transactions found. Run `firma add txn` to add your first trade.');
     return;
   }
+
+  const cur = await pickDisplayCurrency(currency, json);
 
   if (sync) {
     if (json) {
@@ -64,9 +68,10 @@ export const showPortfolioCommand = async ({ json = false, sync = true } = {}) =
     pc.dim('QTY'.padEnd(COL.SHARES)),
     pc.dim('AVG'.padEnd(COL.AVG)),
     pc.dim('PRICE'.padEnd(COL.PRICE)),
+    pc.dim('YIELD'.padEnd(COL.YIELD)),
     pc.dim('P&L'),
   ].join('  ');
-  const divider = pc.dim('─'.repeat(COL.TICKER + COL.SHARES + COL.AVG + COL.PRICE + COL.PNL + 8));
+  const divider = pc.dim('─'.repeat(COL.TICKER + COL.SHARES + COL.AVG + COL.PRICE + COL.YIELD + COL.PNL + 10));
 
   let totalCost = 0, totalValue = 0;
   let lastSyncedAt: string | null = null;
@@ -88,12 +93,15 @@ export const showPortfolioCommand = async ({ json = false, sync = true } = {}) =
       ? `${fmt.usd(pnl)} (${fmt.pct(pnlPct)})`
       : pc.dim('─');
 
+    const yieldStr = p?.dividend_yield != null ? `${p.dividend_yield.toFixed(2)}%` : '─';
+
     return [
       pc.bold(ticker.padEnd(COL.TICKER)),
       fmt.shares(h.shares).padEnd(COL.SHARES),
-      (avgPrice != null ? fmt.usd(avgPrice) : pc.dim('─')).padEnd(COL.AVG),
-      (p ? fmt.usd(p.current_price) : pc.dim('─')).padEnd(COL.PRICE),
-      pnl != null ? colorPnl(pnl, pnlText) : pnlText,
+      avgPrice != null ? fmt.usd(avgPrice).padEnd(COL.AVG) : pc.dim('─'.padEnd(COL.AVG)),
+      p ? fmt.usd(p.current_price).padEnd(COL.PRICE) : pc.dim('─'.padEnd(COL.PRICE)),
+      pc.dim(yieldStr.padEnd(COL.YIELD)),
+      pnl != null ? colorPnl(pnl, pnlText) : pc.dim(pnlText as string),
     ].join('  ');
   });
 
@@ -111,4 +119,76 @@ export const showPortfolioCommand = async ({ json = false, sync = true } = {}) =
     : `\n${pc.dim('Not synced — run `firma sync`')}`;
 
   note(`${header}\n${divider}\n${rows.join('\n')}\n${divider}\n${summary}${lastSynced}`, 'Portfolio');
+
+  // ── Sector allocation ───────────────────────────────
+  const sectorMap = new Map<string, number>();
+  const countryMap = new Map<string, number>();
+
+  for (const ticker of tickers) {
+    const h = holdings.get(ticker)!;
+    const p = priceMap.get(ticker);
+    if (!p) continue;
+    const mv = p.current_price * h.shares;
+    const sector  = p.sector  ?? 'Unknown';
+    const country = p.country ?? 'Unknown';
+    sectorMap.set(sector,  (sectorMap.get(sector)   ?? 0) + mv);
+    countryMap.set(country, (countryMap.get(country) ?? 0) + mv);
+  }
+
+  if (sectorMap.size > 0) {
+    const BAR_W = 20;
+    const renderAlloc = (map: Map<string, number>, total: number) =>
+      [...map.entries()]
+        .sort(([, a], [, b]) => b - a)
+        .map(([label, mv]) => {
+          const pct = mv / total;
+          const bar = pc.cyan(fracBar(pct, BAR_W)) + pc.dim('░'.repeat(BAR_W - Math.round(pct * BAR_W)));
+          return `  ${label.padEnd(20)}  ${bar}  ${(pct * 100).toFixed(1)}%`;
+        })
+        .join('\n');
+
+    note(renderAlloc(sectorMap, totalValue), 'Sector Allocation');
+    note(renderAlloc(countryMap, totalValue), 'Country Allocation');
+  }
+
+  // ── Net worth context ───────────────────────────────
+  const repo2 = getRepository();
+  const balancePeriods = repo2.balance.getPeriods();
+  if (balancePeriods.length > 0) {
+    const latestPeriod = balancePeriods[0];
+    const balEntries = repo2.balance.getByPeriod(latestPeriod);
+    const BAR_W = 20;
+    const rates = await fetchFxRates().catch(() => FALLBACK_RATES as Record<string, number>);
+    const rate = (rates[cur] ?? FALLBACK_RATES[cur]) as number;
+    const fmt2 = (krw: number) => fmtAmount(krw, cur, rate);
+
+    const toKrw = (e: { amount: number; currency: string }) => entryKrw(e.amount, e.currency, rates);
+    const totalAssets = balEntries.filter(e => e.type === 'asset').reduce((s, e) => s + toKrw(e), 0);
+    const totalLiab   = balEntries.filter(e => e.type === 'liability').reduce((s, e) => s + toKrw(e), 0);
+    const netWorth    = totalAssets - totalLiab;
+
+    if (netWorth > 0) {
+      const bySubType = balEntries
+        .filter(e => e.type === 'asset')
+        .reduce((map, e) => map.set(e.sub_type, (map.get(e.sub_type) ?? 0) + toKrw(e)), new Map<string, number>());
+
+      const SUB_LABEL: Record<string, string> = {
+        cash: 'Cash', investment: 'Investments', other: 'Other Assets',
+      };
+
+      const lines = [...bySubType.entries()]
+        .sort(([, a], [, b]) => b - a)
+        .map(([sub, amt]) => {
+          const pct = amt / (totalAssets || 1);
+          const bar = pc.cyan(fracBar(pct, BAR_W)) + pc.dim('░'.repeat(BAR_W - Math.round(pct * BAR_W)));
+          return `  ${(SUB_LABEL[sub] ?? sub).padEnd(14)}  ${bar}  ${fmt2(amt)}  ${pc.dim(`${(pct * 100).toFixed(1)}%`)}`;
+        });
+
+      lines.push('');
+      lines.push(`  ${'Net Worth'.padEnd(14)}  ${pc.dim('─'.repeat(BAR_W + 2))}  ${pc.bold(fmt2(netWorth))}  ${pc.dim(`(${latestPeriod})`)}`);
+      lines.push(`  ${pc.dim('Portfolio MV'.padEnd(14))}  ${pc.dim('─'.repeat(BAR_W + 2))}  ${pc.dim(fmt.usd(totalValue) + ' USD')}`);
+
+      note(lines.join('\n'), 'Net Worth Breakdown');
+    }
+  }
 };

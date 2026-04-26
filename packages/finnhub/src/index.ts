@@ -62,6 +62,10 @@ const mergeStockData = (
   pe: metric.metric.peBasicExclExtraTTM ?? null,
   eps: metric.metric.epsBasicExclExtraAnnual ?? null,
   marketCap: profile.marketCapitalization,
+  sector: profile.finnhubIndustry ?? null,
+  country: profile.country ?? null,
+  dividendPerShare: metric.metric.dividendPerShareAnnual > 0 ? metric.metric.dividendPerShareAnnual : null,
+  dividendYield:    metric.metric.dividendYieldIndicatedAnnual > 0 ? metric.metric.dividendYieldIndicatedAnnual : null,
 });
 
 export const createFinnhubClient = (apiKey: string) => {

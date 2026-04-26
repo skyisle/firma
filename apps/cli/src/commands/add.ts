@@ -1,7 +1,8 @@
-import { cancel, isCancel, log, select, text } from '@clack/prompts';
+import { log, select, text } from '@clack/prompts';
 import pc from 'picocolors';
-import { getRepository } from '../db/index.ts';
 import { getActiveTickers } from '@firma/db';
+import { getRepository } from '../db/index.ts';
+import { guard, todayLocal } from '../utils/index.ts';
 
 type TxnType = 'buy' | 'sell' | 'deposit' | 'dividend' | 'tax';
 
@@ -35,16 +36,6 @@ const validateDate = (val: string) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(val.trim())) return 'Use YYYY-MM-DD format';
   const d = new Date(val.trim());
   if (isNaN(d.getTime())) return 'Invalid date';
-};
-
-const guard = <T>(value: T | symbol): T => {
-  if (isCancel(value)) { cancel('Cancelled'); process.exit(0); }
-  return value as T;
-};
-
-export const todayLocal = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
 const promptTicker = async (label: string, suggestions: string[], allowManual = true): Promise<string> => {

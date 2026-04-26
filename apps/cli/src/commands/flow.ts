@@ -2,7 +2,13 @@ import { log, note } from '@clack/prompts';
 import pc from 'picocolors';
 import { FLOW_CATEGORIES } from '@firma/utils';
 import { getRepository } from '../db/index.ts';
-import { inputCategoryGroup, currentPeriod, periodEndDate, type EntryResult } from './ledger-input.ts';
+import { fetchFxRates } from '../services/fx.ts';
+import { inputCategoryGroup, type EntryResult } from './ledger-input.ts';
+import {
+  fmtAmount, entryKrw, FALLBACK_RATES, CURRENCY_SYMBOL,
+  currentPeriod, periodEndDate,
+  pickDisplayCurrency, pickInputCurrency,
+} from '../utils/index.ts';
 
 export const addFlowCommand = async ({ period }: { period?: string } = {}) => {
   const repo = getRepository();
@@ -11,23 +17,48 @@ export const addFlowCommand = async ({ period }: { period?: string } = {}) => {
 
   log.message(pc.dim(`  Period: ${targetPeriod}  (${date})\n`));
 
+  let ratesLive = true;
+  const rates = await fetchFxRates().catch(() => { ratesLive = false; return FALLBACK_RATES as Record<string, number>; });
+  const usdRate = (rates['USD'] ?? FALLBACK_RATES['USD']) as number;
+
+  const inputCur = await pickInputCurrency();
+  const inputRate = (rates[inputCur] ?? FALLBACK_RATES[inputCur]) as number;
+  const sym = CURRENCY_SYMBOL[inputCur];
+
+  if (inputCur !== 'USD') {
+    const ratePerUSD = inputRate / usdRate;
+    const rateStr = ratePerUSD >= 1
+      ? `${sym}${Math.round(ratePerUSD).toLocaleString('en-US')}`
+      : `${sym}${ratePerUSD.toFixed(2)}`;
+    log.message(pc.dim(`  1 USD = ${rateStr}  (${ratesLive ? 'live' : 'fallback'})`));
+  }
+
+  const toInput = (amount: number, storedCurrency: string): number => {
+    const fromRate = (rates[storedCurrency] ?? FALLBACK_RATES[storedCurrency] ?? 1) as number;
+    return Math.round(amount * inputRate / fromRate);
+  };
+
   const existing = repo.flow.getByPeriod(targetPeriod);
-  const existingMap = new Map(existing.map(e => [e.category, e.amount]));
+  const existingMap = new Map(existing.map(e => [e.category, toInput(e.amount, e.currency)]));
 
   const income  = FLOW_CATEGORIES.filter(c => c.type === 'income');
   const expense = FLOW_CATEGORIES.filter(c => c.type === 'expense');
 
   log.message(pc.bold('── INCOME ───────────────────────────────'));
-  const incomeEntries = await inputCategoryGroup(income, existingMap);
+  const incomeEntries = await inputCategoryGroup(income, existingMap, new Map(), sym);
 
   log.message(pc.bold('\n── EXPENSES ─────────────────────────────'));
-  const expenseEntries = await inputCategoryGroup(expense, existingMap);
+  const expenseEntries = await inputCategoryGroup(expense, existingMap, new Map(), sym);
+
+  const toUSD = (amount: number): number => Math.round(amount * usdRate / inputRate);
 
   const allEntries: EntryResult[] = [...incomeEntries, ...expenseEntries];
   for (const e of allEntries) {
     repo.flow.upsert({
-      period: targetPeriod, date, type: e.type, sub_type: e.sub_type,
-      category: e.category, amount: e.amount, memo: e.memo ?? null,
+      period: targetPeriod, date,
+      type: e.type, sub_type: e.sub_type, category: e.category,
+      amount: toUSD(e.amount), currency: 'USD',
+      memo: e.memo ?? null,
     });
   }
 
@@ -37,30 +68,29 @@ export const addFlowCommand = async ({ period }: { period?: string } = {}) => {
   const colorNet     = netFlow >= 0 ? pc.green : pc.red;
 
   const summary = [
-    `${'Income'.padEnd(16)}${totalIncome.toLocaleString('en-US')} KRW`,
-    `${'Expenses'.padEnd(16)}${totalExpense.toLocaleString('en-US')} KRW`,
+    `${'Income'.padEnd(16)}${sym}${totalIncome.toLocaleString('en-US')} ${inputCur}`,
+    `${'Expenses'.padEnd(16)}${sym}${totalExpense.toLocaleString('en-US')} ${inputCur}`,
     pc.dim('─'.repeat(36)),
-    `${'Net Flow'.padEnd(16)}${colorNet(pc.bold(netFlow.toLocaleString('en-US')))} KRW`,
+    `${'Net Flow'.padEnd(16)}${colorNet(pc.bold(`${sym}${netFlow.toLocaleString('en-US')}`))} ${inputCur}`,
   ].join('\n');
 
   note(summary, `Cash Flow  ${targetPeriod}`);
 };
 
-export const showFlowCommand = async ({ json = false, period }: { json?: boolean; period?: string } = {}) => {
+export const showFlowCommand = async ({ json = false, period, currency }: { json?: boolean; period?: string; currency?: string } = {}) => {
   const repo = getRepository();
-  const targetPeriod = period ?? currentPeriod();
+  let targetPeriod = period ?? currentPeriod();
+  if (!period) {
+    const entries = repo.flow.getByPeriod(targetPeriod);
+    if (entries.length === 0) {
+      const latest = repo.flow.getPeriods()[0];
+      if (latest) targetPeriod = latest;
+    }
+  }
   const entries = repo.flow.getByPeriod(targetPeriod);
 
-  const income         = entries.filter(e => e.type === 'income');
-  const expenses       = entries.filter(e => e.type === 'expense');
-  const total_income   = income.reduce((s, e) => s + e.amount, 0);
-  const total_expenses = expenses.reduce((s, e) => s + e.amount, 0);
-  const net_flow       = total_income - total_expenses;
-
   if (json) {
-    process.stdout.write(JSON.stringify({
-      period: targetPeriod, entries, total_income, total_expenses, net_flow,
-    }, null, 2) + '\n');
+    process.stdout.write(JSON.stringify({ period: targetPeriod, entries }, null, 2) + '\n');
     return;
   }
 
@@ -69,11 +99,26 @@ export const showFlowCommand = async ({ json = false, period }: { json?: boolean
     return;
   }
 
+  const cur = await pickDisplayCurrency(currency, json);
+  const rates = await fetchFxRates().catch(() => FALLBACK_RATES as Record<string, number>);
+  const displayRate = (rates[cur] ?? FALLBACK_RATES[cur]) as number;
+  const fmt = (amount: number, storedCurrency: string) =>
+    fmtAmount(entryKrw(amount, storedCurrency, rates), cur, displayRate);
+
+  const income   = entries.filter(e => e.type === 'income');
+  const expenses = entries.filter(e => e.type === 'expense');
+
+  const sumKrw = (group: typeof entries) =>
+    group.reduce((s, e) => s + entryKrw(e.amount, e.currency, rates), 0);
+
+  const totalIncomeKrw  = sumKrw(income);
+  const totalExpenseKrw = sumKrw(expenses);
+  const netFlowKrw      = totalIncomeKrw - totalExpenseKrw;
+  const colorNet = netFlowKrw >= 0 ? pc.green : pc.red;
+
   const renderRows = (group: typeof entries) =>
     group.length === 0 ? [pc.dim('  (none)')]
-      : group.map(e => `  ${pc.dim(e.category.padEnd(20))}${e.amount.toLocaleString('en-US').padStart(14)} KRW`);
-
-  const colorNet = net_flow >= 0 ? pc.green : pc.red;
+      : group.map(e => `  ${pc.dim(e.category.padEnd(20))}${fmt(e.amount, e.currency).padStart(14)}`);
 
   const body = [
     pc.bold('INCOME'),
@@ -82,9 +127,9 @@ export const showFlowCommand = async ({ json = false, period }: { json?: boolean
     pc.bold('EXPENSES'),
     ...renderRows(expenses),
     pc.dim('─'.repeat(40)),
-    `${'Income'.padEnd(20)}${total_income.toLocaleString('en-US').padStart(14)} KRW`,
-    `${'Expenses'.padEnd(20)}${total_expenses.toLocaleString('en-US').padStart(14)} KRW`,
-    `${pc.bold('Net Flow'.padEnd(20))}${colorNet(pc.bold(net_flow.toLocaleString('en-US').padStart(14)))} KRW`,
+    `${'Income'.padEnd(20)}${fmtAmount(totalIncomeKrw, cur, displayRate).padStart(14)}`,
+    `${'Expenses'.padEnd(20)}${fmtAmount(totalExpenseKrw, cur, displayRate).padStart(14)}`,
+    `${pc.bold('Net Flow'.padEnd(20))}${colorNet(pc.bold(fmtAmount(netFlowKrw, cur, displayRate).padStart(14)))}`,
   ].join('\n');
 
   note(body, `Cash Flow  ${targetPeriod}`);

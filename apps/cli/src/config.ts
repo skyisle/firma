@@ -8,6 +8,7 @@ const CONFIG_PATH = join(CONFIG_DIR, 'config.json');
 type Config = {
   finnhub_api_key?: string;
   db_path?: string;
+  currency?: string;
   update_check_at?: number;
   latest_version?: string;
 };
@@ -29,3 +30,6 @@ export const setConfigValue = (key: keyof Config, value: string) => {
   const config = readConfig() ?? {};
   writeConfig({ ...config, [key]: value });
 };
+
+export const getDefaultCurrency = (): string =>
+  readConfig()?.currency ?? 'USD';

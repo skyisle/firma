@@ -37,8 +37,7 @@ packages/
 Three verb groups: `add` (input), `show` (read), `report` (aggregated).
 
 ```
-# auth & config
-firma auth login / whoami / logout
+# config
 firma config set finnhub-key <key>
 firma config get [key]
 
@@ -47,12 +46,15 @@ firma add txn                 # buy/sell/deposit/dividend/tax
 firma add balance [-p YYYY-MM]
 firma add flow    [-p YYYY-MM]
 firma add monthly [-p YYYY-MM]   # balance + flow in one flow
+firma add snapshot            # sync prices then record portfolio snapshot for today
 
 # show — read-only, supports --json
 firma show portfolio
 firma show txns [ticker]
 firma show balance [-p YYYY-MM]
 firma show flow    [-p YYYY-MM]
+firma show snapshot [ticker]   # portfolio value history; --from/--to for date range
+firma show dividend            # estimated annual income + per-ticker yield
 firma show news <ticker>
 firma show insider <ticker>
 firma show financials <ticker>
@@ -68,9 +70,11 @@ firma report settle [-p YYYY-MM]   # single-period summary
 firma edit txn [id]
 firma edit balance [period]        # picker if period omitted; pre-fills existing values
 firma edit flow [period]
+firma edit snapshot                # interactive picker: date → ticker → field
 firma delete txn [id]
 firma delete balance [period]      # deletes all entries for the period
 firma delete flow [period]
+firma delete snapshot [date]       # deletes all holdings for that date
 # alias: `firma rm ...` for delete
 
 # actions
@@ -86,9 +90,10 @@ Same pattern: `add_*` / `show_*` / `report_*` (+ `edit_txn`, `delete_txn`, `sync
 add_txn / edit_txn / delete_txn
 add_balance / add_flow              # upsert: also acts as edit for same composite key
 delete_balance / delete_flow        # period-level (or single entry by composite key)
+add_snapshot / edit_snapshot / delete_snapshot / show_snapshot
 show_portfolio / show_txns / show_balance / show_flow / show_prices
-show_news / show_insider / show_financials / show_earnings
-report_settle
+show_dividend / show_news / show_insider / show_financials / show_earnings
+report_balance / report_flow / report_settle
 sync_prices
 ```
 
@@ -99,9 +104,3 @@ yarn dev:cli      # Run CLI (e.g. yarn dev:cli portfolio)
 yarn typecheck    # Turbo typecheck across all packages
 ```
 
-## Pending
-
-- [ ] Token refresh (JWT expires after 1h)
-- [ ] `firma auth logout`
-- [ ] Portfolio snapshots (historical value tracking)
-- [ ] npm publish (`npm install -g firma-app`)

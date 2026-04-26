@@ -16,10 +16,14 @@ import { showNewsCommand } from './commands/news.ts';
 import { showInsiderCommand } from './commands/insider.ts';
 import { showFinancialsCommand } from './commands/financials.ts';
 import { showEarningsCommand } from './commands/earnings.ts';
-import { reportCommand, type Currency } from './commands/report.ts';
+import { showDividendCommand } from './commands/dividend.ts';
+import { reportCommand } from './commands/report.ts';
+import type { Currency } from './utils/index.ts';
+import { addSnapshotCommand, editSnapshotCommand, deleteSnapshotCommand, showSnapshotCommand } from './commands/snapshot.ts';
 
+import { migrateCommand } from './commands/migrate.ts';
 import { mcpInstallCommand } from './commands/mcp.ts';
-import { setConfigValue, readConfig } from './config.ts';
+import { setConfigValue, readConfig, getDefaultCurrency } from './config.ts';
 import { checkForUpdate } from './services/update-check.ts';
 
 const CURRENT_VERSION = '0.4.1';
@@ -103,6 +107,11 @@ add
   .option('-p, --period <period>', 'Period in YYYY-MM format')
   .action(wrap('firma add monthly', (opts: { period?: string }) => addMonthlyCommand({ period: opts.period })));
 
+add
+  .command('snapshot')
+  .description('Sync prices and record a portfolio snapshot for today')
+  .action(wrap('firma add snapshot', addSnapshotCommand));
+
 // ── show (read-only, --json supported) ─────────────────
 const show = program.command('show').description('Show data (use --json for scripting)');
 
@@ -110,10 +119,12 @@ show
   .command('portfolio')
   .alias('p')
   .description('Holdings overview with P&L (auto-syncs prices first)')
-  .option('--json',     'Output as JSON')
-  .option('--no-sync',  'Skip price sync, use cached prices')
+  .option('--json',                    'Output as JSON')
+  .option('--no-sync',                 'Skip price sync, use cached prices')
+  .option('-c, --currency <currency>', 'Display currency: KRW, USD, EUR, JPY, CNY, GBP')
   .action(wrapMaybeJson('firma show portfolio',
-    (opts: { json?: boolean; sync: boolean }) => showPortfolioCommand({ json: opts.json ?? false, sync: opts.sync }),
+    (opts: { json?: boolean; sync: boolean; currency?: string }) =>
+      showPortfolioCommand({ json: opts.json ?? false, sync: opts.sync, currency: opts.currency }),
     (opts) => opts.json ?? false));
 
 show
@@ -126,22 +137,24 @@ show
     (_t, opts) => opts.json ?? false));
 
 show
-  .command('balance')
+  .command('balance [period]')
   .description('Show stored balance entries for a period')
-  .option('-p, --period <period>', 'Period in YYYY-MM format')
+  .option('-c, --currency <currency>', 'Display currency: KRW, USD, EUR, JPY, CNY, GBP')
   .option('--json', 'Output as JSON')
   .action(wrapMaybeJson('firma show balance',
-    (opts: { period?: string; json?: boolean }) => showBalanceCommand({ json: opts.json ?? false, period: opts.period }),
-    (opts) => opts.json ?? false));
+    (period: string | undefined, opts: { json?: boolean; currency?: string }) =>
+      showBalanceCommand({ json: opts.json ?? false, period, currency: opts.currency }),
+    (_p, opts) => opts.json ?? false));
 
 show
-  .command('flow')
+  .command('flow [period]')
   .description('Show stored flow entries for a period')
-  .option('-p, --period <period>', 'Period in YYYY-MM format')
+  .option('-c, --currency <currency>', 'Display currency: KRW, USD, EUR, JPY, CNY, GBP')
   .option('--json', 'Output as JSON')
   .action(wrapMaybeJson('firma show flow',
-    (opts: { period?: string; json?: boolean }) => showFlowCommand({ json: opts.json ?? false, period: opts.period }),
-    (opts) => opts.json ?? false));
+    (period: string | undefined, opts: { period?: string; json?: boolean; currency?: string }) =>
+      showFlowCommand({ json: opts.json ?? false, period, currency: opts.currency }),
+    (_p, opts) => opts.json ?? false));
 
 show
   .command('news <ticker>')
@@ -185,17 +198,39 @@ show
       showEarningsCommand(ticker, { json: opts.json ?? false, weeks: Number(opts.weeks) }),
     (_t, opts) => opts.json ?? false));
 
+show
+  .command('dividend')
+  .description('Estimated annual dividend income across holdings')
+  .option('-c, --currency <currency>', 'Display currency: KRW, USD, EUR, JPY, CNY, GBP')
+  .option('--json', 'Output as JSON')
+  .action(wrapMaybeJson('firma show dividend',
+    (opts: { json?: boolean; currency?: string }) =>
+      showDividendCommand({ json: opts.json ?? false, currency: opts.currency }),
+    (opts) => opts.json ?? false));
+
+show
+  .command('snapshot [ticker]')
+  .description('Portfolio value history (optionally filtered by ticker)')
+  .option('--from <date>',             'Start date in YYYY-MM-DD format')
+  .option('--to <date>',               'End date in YYYY-MM-DD format')
+  .option('-c, --currency <currency>', 'Display currency: KRW, USD, EUR, JPY, CNY, GBP')
+  .option('--json',                    'Output as JSON')
+  .action(wrapMaybeJson('firma show snapshot',
+    (ticker: string | undefined, opts: { from?: string; to?: string; json?: boolean; currency?: string }) =>
+      showSnapshotCommand(ticker, { json: opts.json ?? false, from: opts.from, to: opts.to, currency: opts.currency }),
+    (_t, opts) => opts.json ?? false));
+
 // ── report (aggregated views, --json supported) ────────
 program
   .command('report [target]')
   .alias('r')
   .description('Aggregated reports: balance, flow, settle, or omit for combined')
-  .option('-c, --currency <currency>', 'Display currency: KRW, USD, EUR, JPY, CNY, GBP', 'KRW')
+  .option('-c, --currency <currency>', 'Display currency: KRW, USD, EUR, JPY, CNY, GBP')
   .option('-p, --period <period>',     'Period in YYYY-MM (used by `report settle`)')
   .option('--json',                    'Output raw data as JSON')
   .action(wrapMaybeJson('firma report',
-    (target: string | undefined, opts: { currency: string; period?: string; json?: boolean }) =>
-      reportCommand(target, opts.currency.toUpperCase() as Currency, { json: opts.json ?? false, period: opts.period }),
+    (target: string | undefined, opts: { currency?: string; period?: string; json?: boolean }) =>
+      reportCommand(target, (opts.currency ?? getDefaultCurrency()).toUpperCase() as Currency, { json: opts.json ?? false, period: opts.period }),
     (_t, opts) => opts.json ?? false));
 
 // ── edit ───────────────────────────────────────────────
@@ -216,6 +251,11 @@ edit
   .description('Edit a monthly flow entry (re-runs add wizard with existing values pre-filled)')
   .action(wrap('firma edit flow', editFlowCommand));
 
+edit
+  .command('snapshot')
+  .description('Edit a snapshot entry (interactive picker)')
+  .action(wrap('firma edit snapshot', editSnapshotCommand));
+
 // ── delete ─────────────────────────────────────────────
 const del = program.command('delete').alias('rm').description('Delete an existing entry');
 
@@ -234,6 +274,11 @@ del
   .description('Delete all flow entries for a period')
   .action(wrap('firma delete flow', deleteFlowCommand));
 
+del
+  .command('snapshot [date]')
+  .description('Delete all snapshot entries for a date (YYYY-MM-DD)')
+  .action(wrap('firma delete snapshot', deleteSnapshotCommand));
+
 // ── actions ────────────────────────────────────────────
 program
   .command('sync')
@@ -243,6 +288,11 @@ program
     (opts: { json?: boolean }) => syncCommand({ json: opts.json ?? false }),
     (opts) => opts.json ?? false));
 
+program
+  .command('migrate')
+  .description('Convert legacy KRW balance/flow entries to USD using historical exchange rates')
+  .action(wrap('firma migrate', migrateCommand));
+
 // ── config ─────────────────────────────────────────────
 const config = program.command('config').description('Manage local configuration');
 
@@ -250,9 +300,10 @@ config
   .command('set <key> <value>')
   .description('Set a config value (keys: finnhub-key, db-path)')
   .action((key: string, value: string) => {
-    const keyMap: Record<string, 'finnhub_api_key' | 'db_path'> = {
+    const keyMap: Record<string, 'finnhub_api_key' | 'db_path' | 'currency'> = {
       'finnhub-key': 'finnhub_api_key',
       'db-path':     'db_path',
+      'currency':    'currency',
     };
     const mapped = keyMap[key];
     if (!mapped) {
@@ -271,11 +322,14 @@ config
     if (key === 'finnhub-key') {
       log.message(cfg.finnhub_api_key ? pc.dim('(set)') : pc.dim('(not set)'));
     } else if (key === 'db-path') {
-      log.message(cfg.db_path ?? pc.dim(`~/.firma/firma.db (default)`));
+      log.message(cfg.db_path ?? pc.dim('~/.firma/firma.db (default)'));
+    } else if (key === 'currency') {
+      log.message(cfg.currency ?? pc.dim('USD (default)'));
     } else {
       log.message([
         `finnhub-key  ${cfg.finnhub_api_key ? pc.green('set') : pc.dim('not set')}`,
         `db-path      ${cfg.db_path ?? pc.dim('~/.firma/firma.db (default)')}`,
+        `currency     ${cfg.currency ?? pc.dim('USD (default)')}`,
       ].join('\n'));
     }
   });

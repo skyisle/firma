@@ -1,4 +1,4 @@
-export type FxRates = Record<string, number>;
+type FxRates = Record<string, number>;
 
 let _cache: { rates: FxRates; ts: number } | null = null;
 

@@ -4,9 +4,9 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { mkdirSync } from 'fs';
 import { readConfig } from '../config.ts';
-import { transactions, balanceEntries, flowEntries, prices } from '@firma/db';
+import { transactions, balanceEntries, flowEntries, prices, portfolioSnapshots } from '@firma/db';
 
-const schema = { transactions, balanceEntries, flowEntries, prices };
+const schema = { transactions, balanceEntries, flowEntries, prices, portfolioSnapshots };
 
 const getDbPath = () => readConfig()?.db_path ?? join(homedir(), '.firma', 'firma.db');
 
@@ -45,7 +45,26 @@ export const getDb = () => {
       low_52w REAL NOT NULL DEFAULT 0, pe REAL, eps REAL,
       market_cap REAL NOT NULL DEFAULT 0, synced_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL, ticker TEXT NOT NULL,
+      shares REAL NOT NULL, avg_price REAL,
+      current_price REAL NOT NULL, currency TEXT NOT NULL DEFAULT 'USD',
+      UNIQUE (date, ticker)
+    );
   `);
+
+  const addCol = (table: string, col: string, def: string) => {
+    const exists = (sqlite.pragma(`table_info(${table})`) as { name: string }[]).some(c => c.name === col);
+    if (!exists) sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+  };
+
+  addCol('prices',          'sector',             'TEXT');
+  addCol('prices',          'country',            'TEXT');
+  addCol('prices',          'dividend_per_share', 'REAL');
+  addCol('prices',          'dividend_yield',     'REAL');
+  addCol('balance_entries', 'currency',           "TEXT NOT NULL DEFAULT 'KRW'");
+  addCol('flow_entries',    'currency',           "TEXT NOT NULL DEFAULT 'KRW'");
   _db = drizzle(sqlite, { schema });
   return _db;
 };

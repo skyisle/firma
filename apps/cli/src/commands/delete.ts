@@ -1,12 +1,8 @@
-import { cancel, confirm, isCancel, log, select } from '@clack/prompts';
+import { cancel, confirm, log, select } from '@clack/prompts';
 import pc from 'picocolors';
-import { getRepository } from '../db/index.ts';
 import type { Transaction } from '@firma/db';
-
-const guard = <T>(value: T | symbol): T => {
-  if (isCancel(value)) { cancel('Cancelled'); process.exit(0); }
-  return value as T;
-};
+import { getRepository } from '../db/index.ts';
+import { guard } from '../utils/index.ts';
 
 const fmtTxn = (t: Transaction) => {
   const amount = t.shares * t.price;

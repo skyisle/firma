@@ -2,12 +2,12 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { eq, asc, and } from 'drizzle-orm';
+import { eq, asc, and, gte, lte } from 'drizzle-orm';
 import { createFinnhubClient } from '@firma/finnhub';
 import type { FinancialLineItem, FinancialPeriod } from '@firma/finnhub';
 import {
   getDb, getFinnhubKey,
-  transactions, balanceEntries, flowEntries, prices,
+  transactions, balanceEntries, flowEntries, prices, portfolioSnapshots,
   aggregateHoldings, getActiveTickers,
 } from './db.ts';
 
@@ -94,6 +94,64 @@ server.tool(
       ? db.select().from(flowEntries).where(eq(flowEntries.period, period)).all()
       : db.select().from(flowEntries).all();
     return ok(rows);
+  },
+);
+
+server.tool(
+  'report_balance',
+  'Aggregate balance sheet entries by period. Returns monthly net worth trend sorted by period.',
+  { limit: z.number().int().min(1).max(120).default(36).describe('Max number of periods to return (default: 36)') },
+  async ({ limit }) => {
+    const db = getDb();
+    const rows = db.select().from(balanceEntries).all();
+
+    const byPeriod = rows.reduce((map, { period, type, amount }) => {
+      const prev = map.get(period) ?? { assets: 0, liabilities: 0 };
+      map.set(period, {
+        assets:      prev.assets      + (type === 'asset'     ? amount : 0),
+        liabilities: prev.liabilities + (type === 'liability' ? amount : 0),
+      });
+      return map;
+    }, new Map<string, { assets: number; liabilities: number }>());
+
+    const result = [...byPeriod.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-limit)
+      .map(([period, { assets, liabilities }]) => ({
+        period, assets, liabilities, net_worth: assets - liabilities,
+      }));
+
+    return ok(result);
+  },
+);
+
+server.tool(
+  'report_flow',
+  'Aggregate cash flow entries by period. Returns monthly income, expenses, net flow, and savings rate sorted by period.',
+  { limit: z.number().int().min(1).max(120).default(36).describe('Max number of periods to return (default: 36)') },
+  async ({ limit }) => {
+    const db = getDb();
+    const rows = db.select().from(flowEntries).all();
+
+    const byPeriod = rows.reduce((map, { period, type, amount }) => {
+      const prev = map.get(period) ?? { income: 0, expenses: 0 };
+      map.set(period, {
+        income:   prev.income   + (type === 'income'  ? amount : 0),
+        expenses: prev.expenses + (type === 'expense' ? amount : 0),
+      });
+      return map;
+    }, new Map<string, { income: number; expenses: number }>());
+
+    const result = [...byPeriod.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-limit)
+      .map(([period, { income, expenses }]) => ({
+        period, income, expenses,
+        net_flow: income - expenses,
+        savings_rate: income > 0 ? ((income - expenses) / income) * 100 : null,
+      }));
+
+    return ok(result);
   },
 );
 
@@ -211,17 +269,17 @@ server.tool(
     type:     z.enum(['asset', 'liability']),
     sub_type: z.string().describe('cash | investment | other | short_term | long_term'),
     category: z.string().describe('Specific category name'),
-    amount:   z.number().int().describe('Amount in KRW'),
+    amount:   z.number().int().describe('Amount in USD (whole dollars)'),
     memo:     z.string().optional(),
   },
   async ({ period, date, type, sub_type, category, amount, memo }) => {
     const db = getDb();
-    db.insert(balanceEntries).values({ period, date, type, sub_type, category, amount, memo: memo ?? null })
+    db.insert(balanceEntries).values({ period, date, type, sub_type, category, amount, currency: 'USD', memo: memo ?? null })
       .onConflictDoUpdate({
         target: [balanceEntries.period, balanceEntries.type, balanceEntries.sub_type, balanceEntries.category],
-        set: { amount, date, memo: memo ?? null },
+        set: { amount, currency: 'USD', date, memo: memo ?? null },
       }).run();
-    return ok({ period, type, sub_type, category, amount });
+    return ok({ period, type, sub_type, category, amount, currency: 'USD' });
   },
 );
 
@@ -234,17 +292,17 @@ server.tool(
     type:     z.enum(['income', 'expense']),
     sub_type: z.string(),
     category: z.string(),
-    amount:   z.number().int().describe('Amount in KRW'),
+    amount:   z.number().int().describe('Amount in USD (whole dollars)'),
     memo:     z.string().optional(),
   },
   async ({ period, date, type, sub_type, category, amount, memo }) => {
     const db = getDb();
-    db.insert(flowEntries).values({ period, date, type, sub_type, category, amount, memo: memo ?? null })
+    db.insert(flowEntries).values({ period, date, type, sub_type, category, amount, currency: 'USD', memo: memo ?? null })
       .onConflictDoUpdate({
         target: [flowEntries.period, flowEntries.type, flowEntries.sub_type, flowEntries.category],
-        set: { amount, date, memo: memo ?? null },
+        set: { amount, currency: 'USD', date, memo: memo ?? null },
       }).run();
-    return ok({ period, type, sub_type, category, amount });
+    return ok({ period, type, sub_type, category, amount, currency: 'USD' });
   },
 );
 
@@ -330,7 +388,10 @@ server.tool(
         currency: d.currency ?? 'USD', current_price: d.currentPrice,
         prev_close: d.prevClose ?? 0, change_percent: d.changePercent ?? 0,
         high_52w: d.high52w ?? 0, low_52w: d.low52w ?? 0,
-        pe: d.pe ?? null, eps: d.eps ?? null, market_cap: d.marketCap ?? 0, synced_at: now,
+        pe: d.pe ?? null, eps: d.eps ?? null, market_cap: d.marketCap ?? 0,
+        sector: d.sector ?? null, country: d.country ?? null,
+        dividend_per_share: d.dividendPerShare ?? null, dividend_yield: d.dividendYield ?? null,
+        synced_at: now,
       }).onConflictDoUpdate({
         target: prices.ticker,
         set: {
@@ -338,7 +399,9 @@ server.tool(
           current_price: d.currentPrice, prev_close: d.prevClose ?? 0,
           change_percent: d.changePercent ?? 0, high_52w: d.high52w ?? 0,
           low_52w: d.low52w ?? 0, pe: d.pe ?? null, eps: d.eps ?? null,
-          market_cap: d.marketCap ?? 0, synced_at: now,
+          market_cap: d.marketCap ?? 0, sector: d.sector ?? null, country: d.country ?? null,
+          dividend_per_share: d.dividendPerShare ?? null, dividend_yield: d.dividendYield ?? null,
+          synced_at: now,
         },
       }).run();
     }
@@ -347,6 +410,175 @@ server.tool(
   },
 );
 
+
+server.tool(
+  'add_snapshot',
+  'Sync latest prices from Finnhub then record a portfolio snapshot for today. Required before snapshot data is useful.',
+  {},
+  async () => {
+    const apiKey = getFinnhubKey();
+    if (!apiKey) return err('Finnhub API key not configured. Run: firma config set finnhub-key <key>');
+
+    const db = getDb();
+    const tickers = getActiveTickers(db.select().from(transactions).all());
+    if (tickers.length === 0) return err('No active holdings to snapshot');
+
+    const client = createFinnhubClient(apiKey);
+    const results = await client.getStockDataBatch(tickers);
+    const now = new Date().toISOString();
+
+    const priceMap = new Map<string, number>();
+    const currencyMap = new Map<string, string>();
+
+    for (const d of results.filter(r => r.currentPrice > 0)) {
+      db.insert(prices).values({
+        ticker: d.ticker, name: d.name ?? d.ticker, exchange: d.exchange ?? '',
+        currency: d.currency ?? 'USD', current_price: d.currentPrice,
+        prev_close: d.prevClose ?? 0, change_percent: d.changePercent ?? 0,
+        high_52w: d.high52w ?? 0, low_52w: d.low52w ?? 0,
+        pe: d.pe ?? null, eps: d.eps ?? null, market_cap: d.marketCap ?? 0,
+        sector: d.sector ?? null, country: d.country ?? null,
+        dividend_per_share: d.dividendPerShare ?? null, dividend_yield: d.dividendYield ?? null,
+        synced_at: now,
+      }).onConflictDoUpdate({
+        target: prices.ticker,
+        set: {
+          name: d.name ?? d.ticker, exchange: d.exchange ?? '', currency: d.currency ?? 'USD',
+          current_price: d.currentPrice, prev_close: d.prevClose ?? 0,
+          change_percent: d.changePercent ?? 0, high_52w: d.high52w ?? 0,
+          low_52w: d.low52w ?? 0, pe: d.pe ?? null, eps: d.eps ?? null,
+          market_cap: d.marketCap ?? 0, sector: d.sector ?? null, country: d.country ?? null,
+          dividend_per_share: d.dividendPerShare ?? null, dividend_yield: d.dividendYield ?? null,
+          synced_at: now,
+        },
+      }).run();
+      priceMap.set(d.ticker, d.currentPrice);
+      currencyMap.set(d.ticker, d.currency ?? 'USD');
+    }
+
+    const allTxns = db.select().from(transactions).all();
+    const holdings = aggregateHoldings(allTxns);
+    const date = now.slice(0, 10);
+    let count = 0;
+
+    for (const [ticker, holding] of holdings) {
+      const currentPrice = priceMap.get(ticker);
+      if (!currentPrice) continue;
+      const avgPrice = holding.costShares > 0 ? holding.totalCost / holding.costShares : null;
+      db.insert(portfolioSnapshots).values({
+        date, ticker, shares: holding.shares, avg_price: avgPrice,
+        current_price: currentPrice, currency: currencyMap.get(ticker) ?? 'USD',
+      }).onConflictDoUpdate({
+        target: [portfolioSnapshots.date, portfolioSnapshots.ticker],
+        set: { shares: holding.shares, avg_price: avgPrice, current_price: currentPrice },
+      }).run();
+      count++;
+    }
+
+    return ok({ date, count, synced_prices: priceMap.size });
+  },
+);
+
+server.tool(
+  'edit_snapshot',
+  'Update shares, avg_price, or current_price for a specific holding in a snapshot. Identified by date + ticker.',
+  {
+    date:          z.string().describe('Snapshot date (YYYY-MM-DD)'),
+    ticker:        z.string().describe('Stock ticker symbol'),
+    shares:        z.number().positive().optional(),
+    avg_price:     z.number().min(0).nullable().optional(),
+    current_price: z.number().positive().optional(),
+  },
+  async ({ date, ticker, shares, avg_price, current_price }) => {
+    const db = getDb();
+    const fields = Object.fromEntries(
+      Object.entries({ shares, avg_price, current_price }).filter(([, v]) => v !== undefined),
+    );
+    if (Object.keys(fields).length === 0) return err('No fields to update');
+    const res = db.update(portfolioSnapshots).set(fields).where(
+      and(eq(portfolioSnapshots.date, date), eq(portfolioSnapshots.ticker, ticker.toUpperCase())),
+    ).run();
+    if (res.changes === 0) return err(`No snapshot found for ${ticker} on ${date}`);
+    const updated = db.select().from(portfolioSnapshots).where(
+      and(eq(portfolioSnapshots.date, date), eq(portfolioSnapshots.ticker, ticker.toUpperCase())),
+    ).get();
+    return ok(updated);
+  },
+);
+
+server.tool(
+  'delete_snapshot',
+  'Delete all snapshot entries for a given date.',
+  { date: z.string().describe('Snapshot date (YYYY-MM-DD)') },
+  async ({ date }) => {
+    const db = getDb();
+    const res = db.delete(portfolioSnapshots).where(eq(portfolioSnapshots.date, date)).run();
+    if (res.changes === 0) return err(`No snapshot found for ${date}`);
+    return ok({ deleted: res.changes, date });
+  },
+);
+
+server.tool(
+  'show_snapshot',
+  'Query portfolio snapshot history. Without ticker, returns daily total market value. With ticker, returns per-holding time series.',
+  {
+    ticker: z.string().optional().describe('Filter by ticker symbol'),
+    from:   z.string().optional().describe('Start date (YYYY-MM-DD, inclusive)'),
+    to:     z.string().optional().describe('End date (YYYY-MM-DD, inclusive)'),
+  },
+  async ({ ticker, from, to }) => {
+    const db = getDb();
+    const conditions = [
+      ticker ? eq(portfolioSnapshots.ticker, ticker.toUpperCase()) : undefined,
+      from   ? gte(portfolioSnapshots.date, from)                  : undefined,
+      to     ? lte(portfolioSnapshots.date, to)                    : undefined,
+    ].filter(Boolean) as Parameters<typeof and>;
+
+    const rows = conditions.length
+      ? db.select().from(portfolioSnapshots).where(and(...conditions)).orderBy(asc(portfolioSnapshots.date)).all()
+      : db.select().from(portfolioSnapshots).orderBy(asc(portfolioSnapshots.date)).all();
+
+    if (ticker) return ok(rows);
+
+    const byDate = rows.reduce((map, e) => {
+      const prev = map.get(e.date) ?? 0;
+      map.set(e.date, prev + e.current_price * e.shares);
+      return map;
+    }, new Map<string, number>());
+
+    return ok([...byDate.entries()].map(([date, total_market_value]) => ({ date, total_market_value })));
+  },
+);
+
+server.tool(
+  'show_dividend',
+  'Estimated annual dividend income for all holdings. Returns per-ticker yield, annual DPS, and estimated income. Only includes tickers with dividend data.',
+  {},
+  async () => {
+    const db = getDb();
+    const txns = db.select().from(transactions).all();
+    const holdings = aggregateHoldings(txns);
+    const priceMap = new Map(db.select().from(prices).all().map(p => [p.ticker, p]));
+
+    const rows = [...holdings.entries()]
+      .map(([ticker, h]) => {
+        const p = priceMap.get(ticker);
+        const dps      = p?.dividend_per_share ?? null;
+        const yieldPct = p?.dividend_yield     ?? null;
+        return {
+          ticker,
+          shares:         h.shares,
+          dividend_yield: yieldPct,
+          dividend_per_share: dps,
+          estimated_annual_income: dps != null ? dps * h.shares : null,
+        };
+      })
+      .filter(r => r.dividend_per_share != null);
+
+    const total_annual = rows.reduce((s, r) => s + (r.estimated_annual_income ?? 0), 0);
+    return ok({ holdings: rows, total_annual_income: total_annual, total_monthly_income: total_annual / 12 });
+  },
+);
 
 server.tool(
   'show_news',

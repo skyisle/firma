@@ -1,9 +1,9 @@
 import { getActiveTickers } from '@firma/db';
+import { createFinnhubClient } from '@firma/finnhub';
 import { getRepository } from '../db/index.ts';
 import { readConfig } from '../config.ts';
-import { createPriceProvider } from '../providers/prices.ts';
 
-export type SyncResult =
+type SyncResult =
   | { ok: true; count: number; tickers: string[] }
   | { ok: false; reason: 'no-key' | 'no-holdings' | 'fetch-failed'; error?: string };
 
@@ -16,8 +16,8 @@ export const syncPrices = async (): Promise<SyncResult> => {
   if (tickers.length === 0) return { ok: false, reason: 'no-holdings' };
 
   try {
-    const provider = createPriceProvider(apiKey);
-    const results = await provider.getStockDataBatch(tickers);
+    const client = createFinnhubClient(apiKey);
+    const results = await client.getStockDataBatch(tickers);
     const now = new Date().toISOString();
 
     const priceData = results
@@ -35,7 +35,11 @@ export const syncPrices = async (): Promise<SyncResult> => {
         pe:             d.pe ?? null,
         eps:            d.eps ?? null,
         market_cap:     d.marketCap ?? 0,
-        synced_at:      now,
+        sector:             d.sector ?? null,
+        country:            d.country ?? null,
+        dividend_per_share: d.dividendPerShare ?? null,
+        dividend_yield:     d.dividendYield ?? null,
+        synced_at:          now,
       }));
 
     repo.prices.upsertBatch(priceData);
